@@ -4,6 +4,7 @@ import com.isums.houseservice.abstracts.HouseService;
 import com.isums.houseservice.domains.dtos.ApiResponse;
 import com.isums.houseservice.domains.dtos.ApiResponses;
 import com.isums.houseservice.domains.dtos.CreateHouseRequest;
+import com.isums.houseservice.domains.dtos.HouseDto;
 import com.isums.houseservice.domains.emuns.HouseStatus;
 import com.isums.houseservice.domains.entities.House;
 import lombok.RequiredArgsConstructor;
@@ -43,12 +44,12 @@ public class HouseServiceImpl implements HouseService {
     }
 
     @Override
-    public ApiResponse<List<House>> GetAllHouses() {
+    public ApiResponse<List<HouseDto>> GetAllHouses() {
         try {
 
-            List<House> houses = houseQuery.GetAllHouses();
+            List<HouseDto> mapHouse = houseQuery.GetAllHouses();
 
-            return ApiResponses.created(houses, "Success to get all houses");
+            return ApiResponses.ok(mapHouse, "Success to get all houses");
         } catch (Exception ex) {
             return ApiResponses.fail(HttpStatus.INTERNAL_SERVER_ERROR, "Fail to get all houses: " + ex.getMessage());
         }

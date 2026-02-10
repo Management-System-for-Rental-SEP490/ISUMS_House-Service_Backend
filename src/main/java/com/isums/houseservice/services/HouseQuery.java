@@ -1,8 +1,9 @@
 package com.isums.houseservice.services;
 
+import com.isums.houseservice.domains.dtos.HouseDto;
 import com.isums.houseservice.domains.entities.House;
+import com.isums.houseservice.domains.mapper.HouseMapper;
 import com.isums.houseservice.infrastructures.repositories.HouseRepository;
-import jakarta.persistence.Timeout;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
@@ -14,14 +15,16 @@ import java.util.List;
 @RequiredArgsConstructor
 public class HouseQuery {
     private final HouseRepository houseRepository;
+    private final HouseMapper houseMapper;
 
     @CacheEvict(allEntries = true, cacheNames = "allHouses")
     public House createHouse(House house) {
         return houseRepository.save(house);
     }
 
-    @Cacheable(value = "allHouses", sync = true)
-    public List<House> GetAllHouses() {
-        return houseRepository.findAll();
+    //@Cacheable(value = "allHouses", sync = true)
+    public List<HouseDto> GetAllHouses() {
+        List<House> houses = houseRepository.findAll();
+        return houseMapper.mapHouses(houses);
     }
 }
