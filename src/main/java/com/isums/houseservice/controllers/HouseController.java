@@ -7,7 +7,6 @@ import com.isums.houseservice.domains.dtos.ApiResponses;
 import com.isums.houseservice.domains.dtos.CreateHouseRequest;
 import com.isums.houseservice.domains.entities.House;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;

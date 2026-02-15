@@ -6,6 +6,7 @@ import lombok.*;
 import org.hibernate.annotations.UuidGenerator;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -53,6 +54,9 @@ public class House {
     private Instant createdAt;
 
     private Instant updatedAt;
+
+    @OneToMany(mappedBy = "house")
+    private List<InstalledDevice> devices = new ArrayList<>();
 
     public void addFunctionalArea(FunctionalArea area) {
         functionalAreas.add(area);
