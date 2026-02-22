@@ -33,17 +33,30 @@ ext {
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-kafka'
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
-    implementation 'io.grpc:grpc-services'
-    implementation 'org.springframework.grpc:spring-grpc-server-web-spring-boot-starter'
+    implementation "org.springframework.grpc:spring-grpc-spring-boot-starter"
+    implementation "io.grpc:grpc-services"
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
     implementation 'org.springframework.boot:spring-boot-starter-cache'
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
+    implementation 'com.google.protobuf:protobuf-java-util'
+    implementation "org.springframework.grpc:spring-grpc-spring-boot-starter"
+    implementation 'io.grpc:grpc-netty-shaded'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    modules {
+        module("io.grpc:grpc-netty") {
+            replacedBy("io.grpc:grpc-netty-shaded", "Use Netty shaded instead of regular Netty")
+        }
+    }
+    implementation "org.mapstruct:mapstruct:1.6.3"
     compileOnly 'org.projectlombok:lombok'
     runtimeOnly 'org.postgresql:postgresql'
+    runtimeOnly "io.grpc:grpc-netty-shaded"
     annotationProcessor 'org.projectlombok:lombok'
+    annotationProcessor "org.mapstruct:mapstruct-processor:1.6.3"
+    testAnnotationProcessor "org.mapstruct:mapstruct-processor:1.6.3"
     testImplementation 'org.springframework.boot:spring-boot-starter-kafka-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
     testImplementation 'org.springframework.grpc:spring-grpc-test'
