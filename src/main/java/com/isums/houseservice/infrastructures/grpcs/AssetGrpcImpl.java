@@ -1,6 +1,7 @@
 package com.isums.houseservice.infrastructures.grpcs;
 
-import com.isums.houseservice.grpc.*;
+
+import com.isums.contractservice.grpc.*;
 import com.isums.houseservice.infrastructures.repositories.HouseRepository;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
@@ -13,12 +14,12 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-public class AssetGrpcImpl extends AssetGrpcServiceGrpc.AssetGrpcServiceImplBase {
+public class AssetGrpcImpl extends AssetServiceGrpc.AssetServiceImplBase {
     private final HouseRepository houseRepository;
 
     @Override
     @Transactional(readOnly = true)
-    public void getAssetItemByHouseId(GetAssetItemByHouseIdRequest request, StreamObserver<AssetItemResponse> responseObserver) {
+    public void getAssetItemsByHouseId(GetAssetItemsByHouseIdRequest request, StreamObserver<GetAssetItemsResponse> responseObserver) {
         try {
             UUID houseId;
             try {
@@ -36,13 +37,12 @@ public class AssetGrpcImpl extends AssetGrpcServiceGrpc.AssetGrpcServiceImplBase
                 return;
             }
 
-            AssetItemResponse res = AssetItemResponse.newBuilder()
+            GetAssetItemsResponse res = GetAssetItemsResponse.newBuilder()
                     .addAllAssetItems(house.get().getFunctionalAreas().stream()
-                            .map(fa -> AssetItem.newBuilder()
+                            .map(fa -> AssetItemDto.newBuilder()
                                     .setId(fa.getId().toString())
-                                    .setName(fa.getName())
-                                    .setDescription(fa.getDescription() != null ? fa.getDescription() : "")
-                                    .setStatus(fa.getStatus() != null ? fa.getStatus().name() : "")
+                                    .setDisplayName(fa.getName())
+                                    .setStatus(AssetStatus.valueOf(fa.getStatus() != null ? fa.getStatus().name() : ""))
                                     .build())
                             .collect(Collectors.toList()))
                     .build();
