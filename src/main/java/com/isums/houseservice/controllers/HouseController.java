@@ -1,15 +1,16 @@
 package com.isums.houseservice.controllers;
 
-import com.isums.houseservice.abstracts.HouseService;
-import com.isums.houseservice.domains.dtos.ApiResponse;
-import com.isums.houseservice.domains.dtos.CreateHouseRequest;
 import com.isums.houseservice.domains.dtos.HouseDto;
+import com.isums.houseservice.infrastructures.abstracts.HouseService;
+import com.isums.houseservice.domains.dtos.ApiResponse;
+import com.isums.houseservice.domains.dtos.ApiResponses;
+import com.isums.houseservice.domains.dtos.CreateHouseRequest;
 import com.isums.houseservice.domains.entities.House;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/houses")
@@ -18,14 +19,20 @@ public class HouseController {
     private final HouseService houseService;
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<HouseDto>>> getAllHouses() {
-        ApiResponse<List<HouseDto>> res = houseService.GetAllHouses();
-        return ResponseEntity.status(res.getStatusCode()).body(res);
+    public ApiResponse<List<HouseDto>> GetAllHouses() {
+        List<HouseDto> res = houseService.GetAllHouses();
+        return ApiResponses.ok(res, "Success to get all houses");
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse<House>> CreateHouse(@RequestBody CreateHouseRequest req) {
-        ApiResponse<House> res = houseService.CreateHouse(req);
-        return ResponseEntity.status(res.getStatusCode()).body(res);
+    public ApiResponse<House> CreateHouse(@RequestBody CreateHouseRequest req) {
+        House res = houseService.CreateHouse(req);
+        return ApiResponses.created(res, "Success to create house");
+    }
+
+    @GetMapping("/{id}")
+    public ApiResponse<House> getHouseById(@PathVariable UUID id) {
+        House house = houseService.getHouseById(id);
+        return ApiResponses.ok(house, "Success to get house by id");
     }
 }

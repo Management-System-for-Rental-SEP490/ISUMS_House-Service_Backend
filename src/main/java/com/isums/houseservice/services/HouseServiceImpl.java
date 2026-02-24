@@ -1,27 +1,34 @@
 package com.isums.houseservice.services;
 
-import com.isums.houseservice.abstracts.HouseService;
+import com.isums.houseservice.domains.dtos.HouseDto;
+import com.isums.houseservice.infrastructures.abstracts.HouseService;
 import com.isums.houseservice.domains.dtos.ApiResponse;
 import com.isums.houseservice.domains.dtos.ApiResponses;
 import com.isums.houseservice.domains.dtos.CreateHouseRequest;
-import com.isums.houseservice.domains.dtos.HouseDto;
 import com.isums.houseservice.domains.emuns.HouseStatus;
 import com.isums.houseservice.domains.entities.House;
+import com.isums.houseservice.infrastructures.mappers.HouseMapper;
+import com.isums.houseservice.infrastructures.repositories.HouseRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class HouseServiceImpl implements HouseService {
 
-    private final HouseQuery houseQuery;
+    private final HouseRepository houseRepository;
+    private final HouseMapper houseMapper;
 
     @Override
-    public ApiResponse<House> CreateHouse(CreateHouseRequest req) {
+    public House CreateHouse(CreateHouseRequest req) {
         try {
             House house = House.builder()
                     .name(req.name())
@@ -35,25 +42,33 @@ public class HouseServiceImpl implements HouseService {
                     .updatedAt(Instant.now())
                     .build();
 
-            House created = houseQuery.createHouse(house);
-
-            return ApiResponses.created(created, "Success to create house");
-        } catch (Exception ex) {
-            return ApiResponses.fail(HttpStatus.INTERNAL_SERVER_ERROR, "Fail to create new house: " + ex.getMessage());
+            return houseRepository.save(house);
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         }
     }
 
     @Override
-    public ApiResponse<List<HouseDto>> GetAllHouses() {
+    @Cacheable(value = "allHouses")
+    @Transactional(readOnly = true)
+    public List<HouseDto> GetAllHouses() {
         try {
 
-            List<HouseDto> mapHouse = houseQuery.GetAllHouses();
-
-            return ApiResponses.ok(mapHouse, "Success to get all houses");
+            List<House> houses = houseRepository.findAll();
+            return houseMapper.toDtos(houses);
         } catch (Exception ex) {
-            return ApiResponses.fail(HttpStatus.INTERNAL_SERVER_ERROR, "Fail to get all houses: " + ex.getMessage());
+            throw new RuntimeException("Error to get all houses");
         }
     }
 
+    @Override
+    public House getHouseById(UUID id) {
+        try {
 
+            return houseRepository.findById(id)
+                    .orElseThrow(() -> new RuntimeException("House not found"));
+        } catch (Exception ex) {
+            throw new RuntimeException("Fail to get house by id: " + ex.getMessage());
+        }
+    }
 }

@@ -4,9 +4,6 @@ plugins {
     id 'io.spring.dependency-management' version '1.1.7'
     id 'com.google.protobuf' version '0.9.5'
 }
-ext {
-    springGrpcVersion = "1.0.1"
-}
 
 group = 'com.isums'
 version = '0.0.1-SNAPSHOT'
@@ -36,33 +33,40 @@ ext {
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-kafka'
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
-    implementation 'io.grpc:grpc-services'
-    implementation 'org.springframework.grpc:spring-grpc-server-web-spring-boot-starter'
+    implementation "org.springframework.grpc:spring-grpc-spring-boot-starter"
+    implementation "io.grpc:grpc-services"
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
     implementation 'org.springframework.boot:spring-boot-starter-cache'
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
-    implementation 'org.springframework.grpc:spring-grpc-spring-boot-starter'
+    implementation 'com.google.protobuf:protobuf-java-util'
+    implementation "org.springframework.grpc:spring-grpc-spring-boot-starter"
+    implementation 'io.grpc:grpc-netty-shaded'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    modules {
+        module("io.grpc:grpc-netty") {
+            replacedBy("io.grpc:grpc-netty-shaded", "Use Netty shaded instead of regular Netty")
+        }
+    }
+    implementation "org.mapstruct:mapstruct:1.6.3"
     compileOnly 'org.projectlombok:lombok'
     runtimeOnly 'org.postgresql:postgresql'
+    runtimeOnly "io.grpc:grpc-netty-shaded"
     annotationProcessor 'org.projectlombok:lombok'
-    annotationProcessor "org.projectlombok:lombok-mapstruct-binding:0.2.0"
-    implementation "org.mapstruct:mapstruct:1.6.3"
     annotationProcessor "org.mapstruct:mapstruct-processor:1.6.3"
+    testAnnotationProcessor "org.mapstruct:mapstruct-processor:1.6.3"
     testImplementation 'org.springframework.boot:spring-boot-starter-kafka-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
-    implementation platform("com.google.protobuf:protobuf-bom:4.33.4")
-    implementation "com.google.protobuf:protobuf-java"
     testImplementation 'org.springframework.grpc:spring-grpc-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 dependencyManagement {
     imports {
-        mavenBom "org.springframework.cloud:spring-cloud-dependencies:2025.1.0"
-        mavenBom "org.springframework.grpc:spring-grpc-dependencies:$springGrpcVersion"
+        mavenBom "org.springframework.grpc:spring-grpc-dependencies:${springGrpcVersion}"
+        mavenBom "org.springframework.cloud:spring-cloud-dependencies:$springCloudVersion"
     }
 }
 
