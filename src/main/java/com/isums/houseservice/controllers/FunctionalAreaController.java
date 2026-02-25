@@ -1,13 +1,12 @@
 package com.isums.houseservice.controllers;
 
 
-import com.isums.houseservice.abstracts.FunctionalAreaService;
+import com.isums.houseservice.infrastructures.abstracts.FunctionalAreaService;
 import com.isums.houseservice.domains.dtos.ApiResponse;
 import com.isums.houseservice.domains.dtos.ApiResponses;
 import com.isums.houseservice.domains.dtos.FunctionalAreaDto.CreateFunctionalAreaRequest;
 import com.isums.houseservice.domains.dtos.FunctionalAreaDto.FunctionalAreaDto;
 import com.isums.houseservice.domains.dtos.FunctionalAreaDto.UpdateFunctionalAreaRequest;
-import com.isums.houseservice.domains.entities.FunctionalArea;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 

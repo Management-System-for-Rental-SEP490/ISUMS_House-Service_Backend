@@ -1,6 +1,6 @@
 package com.isums.houseservice.services;
 
-import com.isums.houseservice.abstracts.FunctionalAreaService;
+import com.isums.houseservice.infrastructures.abstracts.FunctionalAreaService;
 import com.isums.houseservice.domains.dtos.FunctionalAreaDto.CreateFunctionalAreaRequest;
 import com.isums.houseservice.domains.dtos.FunctionalAreaDto.FunctionalAreaDto;
 import com.isums.houseservice.domains.dtos.FunctionalAreaDto.UpdateFunctionalAreaRequest;
