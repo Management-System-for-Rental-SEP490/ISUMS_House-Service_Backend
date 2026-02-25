@@ -49,7 +49,7 @@ public class HouseServiceImpl implements HouseService {
     }
 
     @Override
-    @Cacheable(value = "allHouses")
+    //@Cacheable(value = "allHouses")
     @Transactional(readOnly = true)
     public List<HouseDto> GetAllHouses() {
         try {
