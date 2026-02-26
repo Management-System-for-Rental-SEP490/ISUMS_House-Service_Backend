@@ -10,6 +10,7 @@ import java.util.List;
 
 @Mapper(componentModel = "spring",uses = FunctionalAreaMapper.class)
 public interface HouseMapper {
+    @Mapping(source = "region.id", target = "regionId")
     @Mapping(target = "functionalAreas", source = "functionalAreas")
     HouseDto toDto(House house);
     List<HouseDto> toDtos(List<House> houses);

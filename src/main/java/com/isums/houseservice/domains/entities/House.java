@@ -59,7 +59,7 @@ public class House {
     private List<InstalledDevice> devices = new ArrayList<>();
 
     @ManyToOne
-    @JoinColumn(name = "region_id",nullable = false)
+    @JoinColumn(name = "region_id")
     private Region region;
 
     public void addFunctionalArea(FunctionalArea area) {
