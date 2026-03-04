@@ -1,6 +1,7 @@
 package com.isums.houseservice.services;
 
 import com.isums.houseservice.domains.dtos.HouseDto;
+import com.isums.houseservice.domains.entities.Region;
 import com.isums.houseservice.infrastructures.abstracts.HouseService;
 import com.isums.houseservice.domains.dtos.ApiResponse;
 import com.isums.houseservice.domains.dtos.ApiResponses;
@@ -9,6 +10,7 @@ import com.isums.houseservice.domains.emuns.HouseStatus;
 import com.isums.houseservice.domains.entities.House;
 import com.isums.houseservice.infrastructures.mappers.HouseMapper;
 import com.isums.houseservice.infrastructures.repositories.HouseRepository;
+import com.isums.houseservice.infrastructures.repositories.RegionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
@@ -26,13 +28,18 @@ public class HouseServiceImpl implements HouseService {
 
     private final HouseRepository houseRepository;
     private final HouseMapper houseMapper;
+    private final RegionRepository regionRepository;
 
     @Override
     public House CreateHouse(CreateHouseRequest req) {
         try {
+            Region region = regionRepository.findById(req.regionId())
+                    .orElseThrow(()-> new RuntimeException("Region not found"));
+
             House house = House.builder()
                     .name(req.name())
                     .address(req.address())
+                    .region(region)
                     .ward(req.ward())
                     .commune(req.commune())
                     .city(req.city())
@@ -49,7 +56,7 @@ public class HouseServiceImpl implements HouseService {
     }
 
     @Override
-    @Cacheable(value = "allHouses")
+    //@Cacheable(value = "allHouses")
     @Transactional(readOnly = true)
     public List<HouseDto> GetAllHouses() {
         try {

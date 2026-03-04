@@ -58,6 +58,10 @@ public class House {
     @OneToMany(mappedBy = "house")
     private List<InstalledDevice> devices = new ArrayList<>();
 
+    @ManyToOne
+    @JoinColumn(name = "region_id")
+    private Region region;
+
     public void addFunctionalArea(FunctionalArea area) {
         functionalAreas.add(area);
         area.setHouse(this);
