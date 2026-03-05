@@ -23,6 +23,7 @@ configurations {
 
 repositories {
     mavenCentral()
+    mavenLocal()
 }
 
 ext {
@@ -51,6 +52,8 @@ dependencies {
         }
     }
     implementation "org.mapstruct:mapstruct:1.6.3"
+    implementation "com.isums:proto-common:1.0-SNAPSHOT"
+    implementation 'com.google.protobuf:protobuf-java:4.34.0-RC2'
     compileOnly 'org.projectlombok:lombok'
     runtimeOnly 'org.postgresql:postgresql'
     runtimeOnly "io.grpc:grpc-netty-shaded"

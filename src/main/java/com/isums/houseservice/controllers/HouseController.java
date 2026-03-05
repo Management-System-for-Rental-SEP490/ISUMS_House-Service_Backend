@@ -25,8 +25,8 @@ public class HouseController {
     }
 
     @PostMapping
-    public ApiResponse<House> CreateHouse(@RequestBody CreateHouseRequest req) {
-        House res = houseService.CreateHouse(req);
+    public ApiResponse<HouseDto> CreateHouse(@RequestBody CreateHouseRequest req) {
+        HouseDto res = houseService.CreateHouse(req);
         return ApiResponses.created(res, "Success to create house");
     }
 

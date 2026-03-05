@@ -31,7 +31,7 @@ public class HouseServiceImpl implements HouseService {
     private final RegionRepository regionRepository;
 
     @Override
-    public House CreateHouse(CreateHouseRequest req) {
+    public HouseDto CreateHouse(CreateHouseRequest req) {
         try {
             Region region = regionRepository.findById(req.regionId())
                     .orElseThrow(()-> new RuntimeException("Region not found"));
@@ -48,8 +48,9 @@ public class HouseServiceImpl implements HouseService {
                     .createdAt(Instant.now())
                     .updatedAt(Instant.now())
                     .build();
+            House created = houseRepository.save(house);
+            return houseMapper.toDto(created);
 
-            return houseRepository.save(house);
         } catch (Exception e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         }

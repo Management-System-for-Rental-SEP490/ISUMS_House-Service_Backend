@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.UUID;
 
 public interface HouseService {
-    House CreateHouse(CreateHouseRequest req);
+    HouseDto CreateHouse(CreateHouseRequest req);
     List<HouseDto> GetAllHouses();
     House getHouseById(UUID id);
 }

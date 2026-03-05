@@ -13,7 +13,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-public class HouseGrpcImpl extends HouseGrpc.HouseImplBase {
+public class HouseGrpcImpl extends HouseServiceGrpc.HouseServiceImplBase {
     private final HouseRepository houseRepository;
 
     @Override
