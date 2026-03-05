@@ -23,7 +23,11 @@ public class House {
     @UuidGenerator
     private UUID id;
 
+    @Column(name = "user_rental_id")
     private UUID userRentalId;
+
+    @Column(name = "tenant_id")
+    private UUID tenantId;
 
     @Column(columnDefinition = "text")
     private String name;

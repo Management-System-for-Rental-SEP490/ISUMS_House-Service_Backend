@@ -1,6 +1,6 @@
 package com.isums.houseservice.infrastructures.grpcs;
 
-import com.isums.contractservice.grpc.*;
+import com.isums.assetservice.grpc.*;
 import com.isums.houseservice.grpc.*;
 import com.isums.houseservice.infrastructures.repositories.HouseRepository;
 import io.grpc.Status;
