@@ -1,6 +1,6 @@
 package com.isums.houseservice.configurations;
 
-import com.isums.contractservice.grpc.AssetServiceGrpc;
+import com.isums.assetservice.grpc.AssetServiceGrpc;
 import com.isums.houseservice.grpc.HouseServiceGrpc;
 import com.isums.userservice.grpc.UserServiceGrpc;
 import org.springframework.context.annotation.Bean;
