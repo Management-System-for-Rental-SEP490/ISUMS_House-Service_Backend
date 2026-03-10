@@ -79,4 +79,15 @@ public class HouseServiceImpl implements HouseService {
             throw new RuntimeException("Fail to get house by id: " + ex.getMessage());
         }
     }
+
+    @Transactional(readOnly = true)
+    @Override
+    public List<HouseDto> getHousesByUser(UUID userId) {
+        try{
+            List<House> houses = houseRepository.findByUserRentalId(userId);
+            return houseMapper.toDtos(houses);
+        } catch (Exception ex) {
+            throw new RuntimeException("Fail to get house by user id: " + ex.getMessage());
+        }
+    }
 }

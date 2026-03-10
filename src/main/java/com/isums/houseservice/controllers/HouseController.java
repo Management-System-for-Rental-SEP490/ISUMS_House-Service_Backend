@@ -7,6 +7,8 @@ import com.isums.houseservice.domains.dtos.ApiResponses;
 import com.isums.houseservice.domains.dtos.CreateHouseRequest;
 import com.isums.houseservice.domains.entities.House;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -34,5 +36,15 @@ public class HouseController {
     public ApiResponse<House> getHouseById(@PathVariable UUID id) {
         House house = houseService.getHouseById(id);
         return ApiResponses.ok(house, "Success to get house by id");
+    }
+
+    @GetMapping("/house")
+    public ApiResponse<List<HouseDto>> getMyHouses(@AuthenticationPrincipal Jwt jwt) {
+
+        UUID userId = UUID.fromString(jwt.getSubject());
+
+        List<HouseDto> houses = houseService.getHousesByUser(userId);
+
+        return ApiResponses.ok(houses, "Get houses successfully");
     }
 }
