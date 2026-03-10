@@ -1,6 +1,7 @@
 package com.isums.houseservice.services;
 
 import com.isums.houseservice.domains.dtos.HouseDto;
+import com.isums.houseservice.domains.entities.Region;
 import com.isums.houseservice.infrastructures.abstracts.HouseService;
 import com.isums.houseservice.domains.dtos.ApiResponse;
 import com.isums.houseservice.domains.dtos.ApiResponses;
@@ -9,6 +10,7 @@ import com.isums.houseservice.domains.emuns.HouseStatus;
 import com.isums.houseservice.domains.entities.House;
 import com.isums.houseservice.infrastructures.mappers.HouseMapper;
 import com.isums.houseservice.infrastructures.repositories.HouseRepository;
+import com.isums.houseservice.infrastructures.repositories.RegionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
@@ -26,13 +28,18 @@ public class HouseServiceImpl implements HouseService {
 
     private final HouseRepository houseRepository;
     private final HouseMapper houseMapper;
+    private final RegionRepository regionRepository;
 
     @Override
-    public House CreateHouse(CreateHouseRequest req) {
+    public HouseDto CreateHouse(CreateHouseRequest req) {
         try {
+            Region region = regionRepository.findById(req.regionId())
+                    .orElseThrow(()-> new RuntimeException("Region not found"));
+
             House house = House.builder()
                     .name(req.name())
                     .address(req.address())
+                    .region(region)
                     .ward(req.ward())
                     .commune(req.commune())
                     .city(req.city())
@@ -41,15 +48,16 @@ public class HouseServiceImpl implements HouseService {
                     .createdAt(Instant.now())
                     .updatedAt(Instant.now())
                     .build();
+            House created = houseRepository.save(house);
+            return houseMapper.toDto(created);
 
-            return houseRepository.save(house);
         } catch (Exception e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         }
     }
 
     @Override
-    @Cacheable(value = "allHouses")
+    //@Cacheable(value = "allHouses")
     @Transactional(readOnly = true)
     public List<HouseDto> GetAllHouses() {
         try {
@@ -69,6 +77,17 @@ public class HouseServiceImpl implements HouseService {
                     .orElseThrow(() -> new RuntimeException("House not found"));
         } catch (Exception ex) {
             throw new RuntimeException("Fail to get house by id: " + ex.getMessage());
+        }
+    }
+
+    @Transactional(readOnly = true)
+    @Override
+    public List<HouseDto> getHousesByUser(UUID userId) {
+        try{
+            List<House> houses = houseRepository.findByUserRentalId(userId);
+            return houseMapper.toDtos(houses);
+        } catch (Exception ex) {
+            throw new RuntimeException("Fail to get house by user id: " + ex.getMessage());
         }
     }
 }

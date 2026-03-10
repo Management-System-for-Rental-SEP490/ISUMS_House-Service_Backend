@@ -48,6 +48,8 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation "com.isums:proto-common:1.0-SNAPSHOT"
     implementation "org.mapstruct:mapstruct:1.6.3"
+    implementation "com.isums:proto-common:1.0-SNAPSHOT"
+    implementation 'com.google.protobuf:protobuf-java:4.34.0-RC2'
     compileOnly 'org.projectlombok:lombok'
     runtimeOnly 'org.postgresql:postgresql'
     runtimeOnly "io.grpc:grpc-netty-shaded"
@@ -67,23 +69,23 @@ dependencyManagement {
     }
 }
 
-//protobuf {
-//    protoc {
-//        artifact = 'com.google.protobuf:protoc'
-//    }
-//    plugins {
-//        grpc {
-//            artifact = 'io.grpc:protoc-gen-grpc-java'
-//        }
-//    }
-//    generateProtoTasks {
-//        all()*.plugins {
-//            grpc {
-//                option '@generated=omit'
-//            }
-//        }
-//    }
-//}
+protobuf {
+    protoc {
+        artifact = 'com.google.protobuf:protoc'
+    }
+    plugins {
+        grpc {
+            artifact = 'io.grpc:protoc-gen-grpc-java'
+        }
+    }
+    generateProtoTasks {
+        all()*.plugins {
+            grpc {
+                option '@generated=omit'
+            }
+        }
+    }
+}
 
 tasks.named('test') {
     useJUnitPlatform()

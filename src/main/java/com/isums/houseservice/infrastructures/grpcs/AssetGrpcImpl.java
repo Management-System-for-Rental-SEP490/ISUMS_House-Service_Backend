@@ -1,7 +1,8 @@
 package com.isums.houseservice.infrastructures.grpcs;
 
-
 import com.isums.assetservice.grpc.*;
+import com.isums.houseservice.grpc.*;
+
 import com.isums.houseservice.infrastructures.repositories.HouseRepository;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
@@ -14,7 +15,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-public class AssetGrpcImpl extends AssetServiceGrpc.AssetServiceImplBase {
+public class AssetGrpcImpl extends AssetServiceGrpc.AssetServiceImplBase  {
     private final HouseRepository houseRepository;
 
     @Override
@@ -41,8 +42,12 @@ public class AssetGrpcImpl extends AssetServiceGrpc.AssetServiceImplBase {
                     .addAllAssetItems(house.get().getFunctionalAreas().stream()
                             .map(fa -> AssetItemDto.newBuilder()
                                     .setId(fa.getId().toString())
-                                    .setDisplayName(fa.getName())
-                                    .setStatus(AssetStatus.valueOf(fa.getStatus() != null ? fa.getStatus().name() : ""))
+                                    .setHouseId(houseId.toString())
+                                    .setDisplayName(fa.getName() != null ? fa.getName() : "")
+                                    .setSerialNumber("")
+                                    .setNfcId("")
+                                    .setConditionPercent(100)
+                                    .setStatus(AssetStatus.ASSET_STATUS_AVAILABLE)
                                     .build())
                             .collect(Collectors.toList()))
                     .build();

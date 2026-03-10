@@ -7,6 +7,7 @@ import java.util.UUID;
 public record CreateHouseRequest(
     String name,
     String address,
+    UUID regionId,
     String ward,
     String commune,
     String city,
