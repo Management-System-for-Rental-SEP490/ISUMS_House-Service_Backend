@@ -1,6 +1,7 @@
 package com.isums.houseservice.controllers;
 
 
+import com.isums.houseservice.domains.dtos.FunctionalAreaDto.GetFunctionalAreasRequest;
 import com.isums.houseservice.infrastructures.abstracts.FunctionalAreaService;
 import com.isums.houseservice.domains.dtos.ApiResponse;
 import com.isums.houseservice.domains.dtos.ApiResponses;
@@ -14,7 +15,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/functionalAreas")
+@RequestMapping("/api/houses/functionalAreas")
 @RequiredArgsConstructor
 public class FunctionalAreaController {
     private final FunctionalAreaService functionalAreaService;
@@ -25,9 +26,9 @@ public class FunctionalAreaController {
         return ApiResponses.ok(response,"Create area successfully");
     }
 
-    @GetMapping
-    public  ApiResponse<List<FunctionalAreaDto>> GetAllAreas(){
-        List<FunctionalAreaDto> response = functionalAreaService.getAllAreas();
+    @GetMapping("/{houseId}")
+    public  ApiResponse<List<FunctionalAreaDto>> GetAllAreas(@PathVariable UUID houseId){
+        List<FunctionalAreaDto> response = functionalAreaService.getAllAreas(houseId);
         return  ApiResponses.ok(response,"Get all areas successfully");
     }
 

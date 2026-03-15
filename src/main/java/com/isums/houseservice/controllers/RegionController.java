@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/regions")
+@RequestMapping("/api/houses/regions")
 @RequiredArgsConstructor
 public class RegionController {
     private final RegionService regionService;

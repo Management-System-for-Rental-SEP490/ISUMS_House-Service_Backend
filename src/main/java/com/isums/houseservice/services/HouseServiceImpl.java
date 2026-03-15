@@ -8,6 +8,7 @@ import com.isums.houseservice.domains.dtos.ApiResponses;
 import com.isums.houseservice.domains.dtos.CreateHouseRequest;
 import com.isums.houseservice.domains.emuns.HouseStatus;
 import com.isums.houseservice.domains.entities.House;
+import com.isums.houseservice.infrastructures.kafkas.HouseEventProducer;
 import com.isums.houseservice.infrastructures.mappers.HouseMapper;
 import com.isums.houseservice.infrastructures.repositories.HouseRepository;
 import com.isums.houseservice.infrastructures.repositories.RegionRepository;
@@ -29,6 +30,7 @@ public class HouseServiceImpl implements HouseService {
     private final HouseRepository houseRepository;
     private final HouseMapper houseMapper;
     private final RegionRepository regionRepository;
+    private final HouseEventProducer houseEventProducer;
 
     @Override
     public HouseDto CreateHouse(CreateHouseRequest req) {
@@ -49,6 +51,7 @@ public class HouseServiceImpl implements HouseService {
                     .updatedAt(Instant.now())
                     .build();
             House created = houseRepository.save(house);
+            houseEventProducer.publishHouseCreated(created.getId());
             return houseMapper.toDto(created);
 
         } catch (Exception e) {
