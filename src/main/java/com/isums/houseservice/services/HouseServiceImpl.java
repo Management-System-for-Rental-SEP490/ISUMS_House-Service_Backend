@@ -60,7 +60,7 @@ public class HouseServiceImpl implements HouseService {
     }
 
     @Override
-    //@Cacheable(value = "allHouses")
+    @Cacheable(value = "allHouses")
     @Transactional(readOnly = true)
     public List<HouseDto> GetAllHouses() {
         try {
@@ -73,11 +73,14 @@ public class HouseServiceImpl implements HouseService {
     }
 
     @Override
-    public House getHouseById(UUID id) {
+    @Cacheable(value = "houseInformation", key = "#id")
+    @Transactional(readOnly = true)
+    public HouseDto getHouseById(UUID id) {
         try {
-
-            return houseRepository.findById(id)
+            House house = houseRepository.findWithFunctionalAreasById(id)
                     .orElseThrow(() -> new RuntimeException("House not found"));
+
+            return houseMapper.toDto(house);
         } catch (Exception ex) {
             throw new RuntimeException("Fail to get house by id: " + ex.getMessage());
         }

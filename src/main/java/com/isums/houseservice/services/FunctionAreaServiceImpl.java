@@ -12,6 +12,7 @@ import com.isums.houseservice.infrastructures.repositories.FunctionalAreaReposit
 import com.isums.houseservice.infrastructures.repositories.HouseRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
@@ -49,6 +50,7 @@ public class FunctionAreaServiceImpl implements FunctionalAreaService {
         }
 
     @Override
+    @Transactional(readOnly = true)
     public List<FunctionalAreaDto> getAllAreas(UUID houseId) {
         try{
             List<FunctionalArea> mapAreas = functionalAreaRepository.findByHouseId(houseId);
