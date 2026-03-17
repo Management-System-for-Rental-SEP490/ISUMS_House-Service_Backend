@@ -13,8 +13,5 @@ public interface HouseRepository extends JpaRepository<House, UUID> {
     @EntityGraph(attributePaths = "functionalAreas")
     Optional<House> findWithFunctionalAreasById(UUID id);
 
-    @EntityGraph(attributePaths = {"functionalAreas","functionalAreas.house"})
-    List<House> findAll();
-
     List<House> findByUserRentalId(UUID userRentalId);
 }

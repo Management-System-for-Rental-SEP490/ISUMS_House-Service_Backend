@@ -5,7 +5,6 @@ import com.isums.houseservice.domains.dtos.FunctionalAreaDto.FunctionalAreaDto;
 import com.isums.houseservice.domains.entities.FunctionalArea;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
-import org.springframework.stereotype.Component;
 
 import java.util.List;
 

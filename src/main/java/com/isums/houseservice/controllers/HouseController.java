@@ -33,8 +33,8 @@ public class HouseController {
     }
 
     @GetMapping("/{id}")
-    public ApiResponse<House> getHouseById(@PathVariable UUID id) {
-        House house = houseService.getHouseById(id);
+    public ApiResponse<HouseDto> getHouseById(@PathVariable UUID id) {
+        HouseDto house = houseService.getHouseById(id);
         return ApiResponses.ok(house, "Success to get house by id");
     }
 

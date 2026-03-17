@@ -10,6 +10,6 @@ import java.util.UUID;
 public interface HouseService {
     HouseDto CreateHouse(CreateHouseRequest req);
     List<HouseDto> GetAllHouses();
-    House getHouseById(UUID id);
+    HouseDto getHouseById(UUID id);
     List<HouseDto> getHousesByUser(UUID userId);
 }
