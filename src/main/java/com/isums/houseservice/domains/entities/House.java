@@ -55,6 +55,11 @@ public class House {
     @OneToMany(mappedBy = "house", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<FunctionalArea> functionalAreas = new java.util.ArrayList<>();
 
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    @OneToMany(mappedBy = "house", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<HouseImage> houseImages = new ArrayList<>();
+
     private Instant createdAt;
 
     private Instant updatedAt;

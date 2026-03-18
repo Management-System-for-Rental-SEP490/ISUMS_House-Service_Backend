@@ -1,15 +1,14 @@
 package com.isums.houseservice.controllers;
 
-import com.isums.houseservice.domains.dtos.HouseDto;
+import com.isums.houseservice.domains.dtos.*;
 import com.isums.houseservice.infrastructures.abstracts.HouseService;
-import com.isums.houseservice.domains.dtos.ApiResponse;
-import com.isums.houseservice.domains.dtos.ApiResponses;
-import com.isums.houseservice.domains.dtos.CreateHouseRequest;
 import com.isums.houseservice.domains.entities.House;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -46,5 +45,23 @@ public class HouseController {
         List<HouseDto> houses = houseService.getHousesByUser(userId);
 
         return ApiResponses.ok(houses, "Get houses successfully");
+    }
+
+    @PostMapping(value = "/{houseId}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<HouseDto> uploadHouseImages(@PathVariable UUID houseId, @RequestParam("files") List<MultipartFile> files) {
+        houseService.uploadHouseImages(houseId, files);
+        return ApiResponses.ok(null, "Upload images successfully");
+    }
+
+    @GetMapping("{houseId}/images")
+    public ApiResponse<List<HouseImageDto>> getHouseImages(@PathVariable UUID houseId) {
+        List<HouseImageDto> images = houseService.getHouseImages(houseId);
+        return ApiResponses.ok(images, "Get images successfully");
+    }
+
+    @DeleteMapping("{houseId}/image/{imageId}")
+    public ApiResponse<Void> deleteHouseImage(@PathVariable UUID houseId, @PathVariable UUID imageId) {
+        houseService.deleteHouseImage(houseId, imageId);
+        return ApiResponses.ok(null, "Delete image successfully");
     }
 }
