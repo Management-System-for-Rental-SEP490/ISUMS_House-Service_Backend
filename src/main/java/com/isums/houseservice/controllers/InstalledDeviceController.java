@@ -9,7 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/installed-devices")
+@RequestMapping("/api/houses/installed-devices")
 @RequiredArgsConstructor
 public class InstalledDeviceController {
 

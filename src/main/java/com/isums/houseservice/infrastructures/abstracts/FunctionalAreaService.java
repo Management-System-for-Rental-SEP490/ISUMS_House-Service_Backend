@@ -9,7 +9,7 @@ import java.util.UUID;
 
 public interface FunctionalAreaService {
     FunctionalAreaDto createArea(CreateFunctionalAreaRequest request);
-    List<FunctionalAreaDto> getAllAreas();
+    List<FunctionalAreaDto> getAllAreas(UUID houseId);
     FunctionalAreaDto updateArea(UUID id, UpdateFunctionalAreaRequest request);
     Boolean deleteArea(UUID id);
 }

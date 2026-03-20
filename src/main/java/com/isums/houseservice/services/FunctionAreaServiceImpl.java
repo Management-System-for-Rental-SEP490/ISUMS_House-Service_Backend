@@ -12,6 +12,7 @@ import com.isums.houseservice.infrastructures.repositories.FunctionalAreaReposit
 import com.isums.houseservice.infrastructures.repositories.HouseRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
@@ -49,9 +50,10 @@ public class FunctionAreaServiceImpl implements FunctionalAreaService {
         }
 
     @Override
-    public List<FunctionalAreaDto> getAllAreas() {
+    @Transactional(readOnly = true)
+    public List<FunctionalAreaDto> getAllAreas(UUID houseId) {
         try{
-            List<FunctionalArea> mapAreas = functionalAreaRepository.findAll();
+            List<FunctionalArea> mapAreas = functionalAreaRepository.findByHouseId(houseId);
             return functionalAreaMapper.mapFuncs(mapAreas);
         } catch (Exception ex) {
             throw new RuntimeException("Error to get asset item: " + ex.getMessage());

@@ -23,6 +23,7 @@ configurations {
 
 repositories {
     mavenCentral()
+    mavenLocal()
 }
 
 ext {
@@ -42,15 +43,15 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
     implementation 'com.google.protobuf:protobuf-java-util'
+    implementation 'com.google.protobuf:protobuf-java:4.34.0-RC2'
     implementation "org.springframework.grpc:spring-grpc-spring-boot-starter"
-    implementation 'io.grpc:grpc-netty-shaded'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
-    modules {
-        module("io.grpc:grpc-netty") {
-            replacedBy("io.grpc:grpc-netty-shaded", "Use Netty shaded instead of regular Netty")
-        }
-    }
+    implementation "com.isums:proto-common:1.0-SNAPSHOT"
     implementation "org.mapstruct:mapstruct:1.6.3"
+    implementation "com.isums:proto-common:1.0-SNAPSHOT"
+    implementation 'com.google.protobuf:protobuf-java:4.34.0-RC2'
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.2'
+    implementation 'software.amazon.awssdk:s3:2.42.14'
     compileOnly 'org.projectlombok:lombok'
     runtimeOnly 'org.postgresql:postgresql'
     runtimeOnly "io.grpc:grpc-netty-shaded"
@@ -70,23 +71,23 @@ dependencyManagement {
     }
 }
 
-protobuf {
-    protoc {
-        artifact = 'com.google.protobuf:protoc'
-    }
-    plugins {
-        grpc {
-            artifact = 'io.grpc:protoc-gen-grpc-java'
-        }
-    }
-    generateProtoTasks {
-        all()*.plugins {
-            grpc {
-                option '@generated=omit'
-            }
-        }
-    }
-}
+//protobuf {
+//    protoc {
+//        artifact = 'com.google.protobuf:protoc'
+//    }
+//    plugins {
+//        grpc {
+//            artifact = 'io.grpc:protoc-gen-grpc-java'
+//        }
+//    }
+//    generateProtoTasks {
+//        all()*.plugins {
+//            grpc {
+//                option '@generated=omit'
+//            }
+//        }
+//    }
+//}
 
 tasks.named('test') {
     useJUnitPlatform()

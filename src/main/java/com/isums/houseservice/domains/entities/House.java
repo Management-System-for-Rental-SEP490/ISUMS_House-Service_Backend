@@ -23,7 +23,11 @@ public class House {
     @UuidGenerator
     private UUID id;
 
+    @Column(name = "user_rental_id")
     private UUID userRentalId;
+
+    @Column(name = "tenant_id")
+    private UUID tenantId;
 
     @Column(columnDefinition = "text")
     private String name;
@@ -50,6 +54,11 @@ public class House {
     @EqualsAndHashCode.Exclude
     @OneToMany(mappedBy = "house", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<FunctionalArea> functionalAreas = new java.util.ArrayList<>();
+
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    @OneToMany(mappedBy = "house", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<HouseImage> houseImages = new ArrayList<>();
 
     private Instant createdAt;
 

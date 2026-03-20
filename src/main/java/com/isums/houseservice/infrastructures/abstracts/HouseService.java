@@ -1,15 +1,21 @@
 package com.isums.houseservice.infrastructures.abstracts;
 
-import com.isums.houseservice.domains.dtos.ApiResponse;
 import com.isums.houseservice.domains.dtos.CreateHouseRequest;
 import com.isums.houseservice.domains.dtos.HouseDto;
+import com.isums.houseservice.domains.dtos.HouseImageDto;
 import com.isums.houseservice.domains.entities.House;
+import com.isums.houseservice.domains.entities.HouseImage;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
 
 public interface HouseService {
-    House CreateHouse(CreateHouseRequest req);
+    HouseDto CreateHouse(CreateHouseRequest req);
     List<HouseDto> GetAllHouses();
-    House getHouseById(UUID id);
+    HouseDto getHouseById(UUID id);
+    List<HouseDto> getHousesByUser(UUID userId);
+    void uploadHouseImages(UUID houseId, List<MultipartFile> file);
+    List<HouseImageDto> getHouseImages(UUID houseId);
+    void deleteHouseImage(UUID houseId, UUID imageId);
 }
