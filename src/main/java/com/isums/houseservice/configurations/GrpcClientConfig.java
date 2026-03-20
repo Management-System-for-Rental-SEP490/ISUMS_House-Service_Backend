@@ -22,11 +22,11 @@ public class GrpcClientConfig {
                 .withInterceptors(tokenInterceptor);
     }
 
-//    @Bean
-//    UserServiceGrpc.UserServiceBlockingStub userStub(GrpcChannelFactory channels, GrpcTokenInterceptor tokenInterceptor) {
-//        return UserServiceGrpc.newBlockingStub(channels.createChannel("user"))
-//                .withInterceptors(tokenInterceptor);
-//    }
+    @Bean
+    UserServiceGrpc.UserServiceBlockingStub userStub(GrpcChannelFactory channels, GrpcTokenInterceptor tokenInterceptor) {
+        return UserServiceGrpc.newBlockingStub(channels.createChannel("user"))
+                .withInterceptors(tokenInterceptor);
+    }
 
 }
 

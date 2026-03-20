@@ -9,8 +9,8 @@ import java.util.UUID;
 public record HouseDto(UUID id,
                        UUID userRentalId,
                        UUID regionId,
-                       String name, String
-                       address,
+                       String name,
+                       String address,
                        String ward,
                        String commune,
                        String city,
