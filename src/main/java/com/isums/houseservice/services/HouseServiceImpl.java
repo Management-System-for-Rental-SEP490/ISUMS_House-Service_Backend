@@ -15,6 +15,7 @@ import com.isums.houseservice.infrastructures.repositories.HouseImageRepository;
 import com.isums.houseservice.infrastructures.repositories.HouseRepository;
 import com.isums.houseservice.infrastructures.repositories.RegionRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
@@ -26,6 +27,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class HouseServiceImpl implements HouseService {
@@ -140,5 +142,14 @@ public class HouseServiceImpl implements HouseService {
                 .orElseThrow(() -> new NotFoundException("House image not found"));
         s3.delete(image.getKey());
         houseImageRepository.delete(image);
+    }
+
+    @Override
+    public void activeHouseForUser(UUID userId, UUID houseId) {
+        House house = houseRepository.findById(houseId)
+                .orElseThrow(() -> new NotFoundException("House not found"));
+        log.info("house info: {}", house);
+        house.setUserRentalId(userId);
+        houseRepository.save(house);
     }
 }
