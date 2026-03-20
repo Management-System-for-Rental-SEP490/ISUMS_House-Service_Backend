@@ -18,4 +18,5 @@ public interface HouseService {
     void uploadHouseImages(UUID houseId, List<MultipartFile> file);
     List<HouseImageDto> getHouseImages(UUID houseId);
     void deleteHouseImage(UUID houseId, UUID imageId);
+    void activeHouseForUser(UUID userId, UUID houseId);
 }
