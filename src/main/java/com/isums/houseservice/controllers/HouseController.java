@@ -3,6 +3,8 @@ package com.isums.houseservice.controllers;
 import com.isums.houseservice.domains.dtos.*;
 import com.isums.houseservice.infrastructures.abstracts.HouseService;
 import com.isums.houseservice.domains.entities.House;
+import com.isums.houseservice.infrastructures.grpcs.UserClientsGrpc;
+import com.isums.userservice.grpc.UserResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -18,6 +20,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class HouseController {
     private final HouseService houseService;
+    private final UserClientsGrpc userClientsGrpc;
 
     @GetMapping
     public ApiResponse<List<HouseDto>> GetAllHouses() {
@@ -39,11 +42,7 @@ public class HouseController {
 
     @GetMapping("/house")
     public ApiResponse<List<HouseDto>> getMyHouses(@AuthenticationPrincipal Jwt jwt) {
-
-        UUID userId = UUID.fromString(jwt.getSubject());
-
-        List<HouseDto> houses = houseService.getHousesByUser(userId);
-
+        List<HouseDto> houses = houseService.getHouseByUserId(jwt.getSubject());
         return ApiResponses.ok(houses, "Get houses successfully");
     }
 
