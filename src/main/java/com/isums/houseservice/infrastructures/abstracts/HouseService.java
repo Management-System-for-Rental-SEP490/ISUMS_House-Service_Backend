@@ -14,8 +14,9 @@ public interface HouseService {
     HouseDto CreateHouse(CreateHouseRequest req);
     List<HouseDto> GetAllHouses();
     HouseDto getHouseById(UUID id);
-    List<HouseDto> getHousesByUser(UUID userId);
+    List<HouseDto> getHouseByUserId(String userId);
     void uploadHouseImages(UUID houseId, List<MultipartFile> file);
     List<HouseImageDto> getHouseImages(UUID houseId);
     void deleteHouseImage(UUID houseId, UUID imageId);
+    void activeHouseForUser(UUID userId, UUID houseId);
 }

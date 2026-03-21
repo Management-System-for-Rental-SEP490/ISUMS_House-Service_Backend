@@ -9,12 +9,15 @@ import com.isums.houseservice.infrastructures.abstracts.HouseService;
 import com.isums.houseservice.domains.dtos.CreateHouseRequest;
 import com.isums.houseservice.domains.emuns.HouseStatus;
 import com.isums.houseservice.domains.entities.House;
+import com.isums.houseservice.infrastructures.grpcs.UserClientsGrpc;
 import com.isums.houseservice.infrastructures.kafkas.HouseEventProducer;
 import com.isums.houseservice.infrastructures.mappers.HouseMapper;
 import com.isums.houseservice.infrastructures.repositories.HouseImageRepository;
 import com.isums.houseservice.infrastructures.repositories.HouseRepository;
 import com.isums.houseservice.infrastructures.repositories.RegionRepository;
+import com.isums.userservice.grpc.UserResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
@@ -26,6 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class HouseServiceImpl implements HouseService {
@@ -36,6 +40,7 @@ public class HouseServiceImpl implements HouseService {
     private final HouseEventProducer houseEventProducer;
     private final S3ServiceImpl s3;
     private final HouseImageRepository houseImageRepository;
+    private final UserClientsGrpc userClientsGrpc;
 
     @Override
     public HouseDto CreateHouse(CreateHouseRequest req) {
@@ -88,9 +93,10 @@ public class HouseServiceImpl implements HouseService {
 
     @Transactional(readOnly = true)
     @Override
-    public List<HouseDto> getHousesByUser(UUID userId) {
+    public List<HouseDto> getHouseByUserId(String userId) {
         try {
-            List<House> houses = houseRepository.findByUserRentalId(userId);
+            UserResponse user = userClientsGrpc.getUserIdAndRoleByKeyCloakId(userId);
+            List<House> houses = houseRepository.findByUserRentalId(UUID.fromString(user.getId()));
             return houseMapper.toDtos(houses);
         } catch (Exception ex) {
             throw new RuntimeException("Fail to get house by user id: " + ex.getMessage());
@@ -140,5 +146,15 @@ public class HouseServiceImpl implements HouseService {
                 .orElseThrow(() -> new NotFoundException("House image not found"));
         s3.delete(image.getKey());
         houseImageRepository.delete(image);
+    }
+
+    @Override
+    @Transactional
+    public void activeHouseForUser(UUID userId, UUID houseId) {
+        House house = houseRepository.findById(houseId)
+                .orElseThrow(() -> new NotFoundException("House not found"));
+        log.info("house info: {}", house);
+        house.setUserRentalId(userId);
+        houseRepository.save(house);
     }
 }
