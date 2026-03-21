@@ -145,6 +145,7 @@ public class HouseServiceImpl implements HouseService {
     }
 
     @Override
+    @Transactional
     public void activeHouseForUser(UUID userId, UUID houseId) {
         House house = houseRepository.findById(houseId)
                 .orElseThrow(() -> new NotFoundException("House not found"));
