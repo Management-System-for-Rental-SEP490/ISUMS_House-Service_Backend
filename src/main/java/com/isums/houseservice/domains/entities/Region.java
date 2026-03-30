@@ -30,10 +30,8 @@ public class Region {
     @Column(nullable = false)
     private UUID managerId;
 
-    @ElementCollection
-    @CollectionTable(name = "region_staff", joinColumns = @JoinColumn(name = "region_id"))
-    @Column(name = "staff_id")
-    private List<UUID> technicalStaffIds = new ArrayList<>();
+    @OneToMany(mappedBy = "region", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<RegionStaff> staffs = new ArrayList<>();
 
     @OneToMany(mappedBy = "region")
     private List<House> houses = new ArrayList<>();
