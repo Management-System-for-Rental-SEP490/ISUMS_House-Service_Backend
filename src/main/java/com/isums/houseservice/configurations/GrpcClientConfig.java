@@ -2,6 +2,7 @@ package com.isums.houseservice.configurations;
 
 import com.isums.assetservice.grpc.AssetServiceGrpc;
 import com.isums.houseservice.grpc.HouseServiceGrpc;
+import com.isums.paymentservice.grpc.PaymentServiceGrpc;
 import com.isums.userservice.grpc.UserServiceGrpc;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -25,6 +26,12 @@ public class GrpcClientConfig {
     @Bean
     UserServiceGrpc.UserServiceBlockingStub userStub(GrpcChannelFactory channels, GrpcTokenInterceptor tokenInterceptor) {
         return UserServiceGrpc.newBlockingStub(channels.createChannel("user"))
+                .withInterceptors(tokenInterceptor);
+    }
+
+    @Bean
+    PaymentServiceGrpc.PaymentServiceBlockingStub paymentStub(GrpcChannelFactory channels, GrpcTokenInterceptor tokenInterceptor) {
+        return PaymentServiceGrpc.newBlockingStub(channels.createChannel("payment"))
                 .withInterceptors(tokenInterceptor);
     }
 

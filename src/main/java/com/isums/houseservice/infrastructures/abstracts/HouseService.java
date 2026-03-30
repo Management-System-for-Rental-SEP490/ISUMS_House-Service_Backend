@@ -1,12 +1,14 @@
 package com.isums.houseservice.infrastructures.abstracts;
 
 import com.isums.houseservice.domains.dtos.CreateHouseRequest;
+import com.isums.houseservice.domains.dtos.HouseAccessStatus;
 import com.isums.houseservice.domains.dtos.HouseDto;
 import com.isums.houseservice.domains.dtos.HouseImageDto;
 import com.isums.houseservice.domains.entities.House;
 import com.isums.houseservice.domains.entities.HouseImage;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -18,5 +20,7 @@ public interface HouseService {
     void uploadHouseImages(UUID houseId, List<MultipartFile> file);
     List<HouseImageDto> getHouseImages(UUID houseId);
     void deleteHouseImage(UUID houseId, UUID imageId);
-    void activeHouseForUser(UUID userId, UUID houseId);
+    void activeHouseForUser(UUID userId, UUID houseId, Instant handoverDate);
+
+    List<HouseAccessStatus> getMyHouseAccess(UUID tenantId);
 }

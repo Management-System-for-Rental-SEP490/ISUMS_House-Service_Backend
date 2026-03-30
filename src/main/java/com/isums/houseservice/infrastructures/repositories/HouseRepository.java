@@ -16,4 +16,6 @@ public interface HouseRepository extends JpaRepository<House, UUID> {
     @Query("SELECT h.region.id FROM House h WHERE h.id = :houseId")
     Optional<UUID> findRegionIdByHouseId(UUID houseId);
     List<House> findByUserRentalId(UUID userRentalId);
+
+    List<House> findByTenantId(UUID tenantId);
 }
