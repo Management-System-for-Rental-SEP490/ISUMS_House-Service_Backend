@@ -1,14 +1,14 @@
 package com.isums.houseservice.services;
 
-import com.isums.houseservice.domains.dtos.HouseDto;
-import com.isums.houseservice.domains.dtos.HouseImageDto;
+import com.isums.houseservice.domains.dtos.*;
+import com.isums.houseservice.domains.emuns.AccessStatus;
 import com.isums.houseservice.domains.entities.HouseImage;
 import com.isums.houseservice.domains.entities.Region;
 import com.isums.houseservice.exceptions.NotFoundException;
 import com.isums.houseservice.infrastructures.abstracts.HouseService;
-import com.isums.houseservice.domains.dtos.CreateHouseRequest;
 import com.isums.houseservice.domains.emuns.HouseStatus;
 import com.isums.houseservice.domains.entities.House;
+import com.isums.houseservice.infrastructures.grpcs.PaymentGrpcClient;
 import com.isums.houseservice.infrastructures.grpcs.UserClientsGrpc;
 import com.isums.houseservice.infrastructures.kafkas.HouseEventProducer;
 import com.isums.houseservice.infrastructures.mappers.HouseMapper;
@@ -25,6 +25,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -41,6 +43,11 @@ public class HouseServiceImpl implements HouseService {
     private final S3ServiceImpl s3;
     private final HouseImageRepository houseImageRepository;
     private final UserClientsGrpc userClientsGrpc;
+    private final PaymentGrpcClient paymentGrpcClient;
+
+    private static final DateTimeFormatter DMY = DateTimeFormatter
+            .ofPattern("dd/MM/yyyy")
+            .withZone(ZoneId.of("Asia/Ho_Chi_Minh"));
 
     @Override
     public HouseDto CreateHouse(CreateHouseRequest req) {
@@ -150,11 +157,53 @@ public class HouseServiceImpl implements HouseService {
 
     @Override
     @Transactional
-    public void activeHouseForUser(UUID userId, UUID houseId) {
+    public void activeHouseForUser(UUID userId, UUID houseId, Instant handoverDate) {
         House house = houseRepository.findById(houseId)
-                .orElseThrow(() -> new NotFoundException("House not found"));
-        log.info("house info: {}", house);
+                .orElseThrow(() -> new NotFoundException("House not found: " + houseId));
         house.setUserRentalId(userId);
+        house.setTenantId(userId);
+        house.setHandoverDate(handoverDate);
+        house.setStatus(HouseStatus.RENTED);
         houseRepository.save(house);
+        log.info("[House] Activated houseId={} tenantId={} handoverDate={}", houseId, userId, handoverDate);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<HouseAccessStatus> getMyHouseAccess(UUID tenantId) {
+        List<House> houses = houseRepository.findByTenantId(tenantId);
+
+        return houses.stream().map(house -> {
+            Instant now = Instant.now();
+
+            InvoiceStatusDto invoiceStatus = paymentGrpcClient.getInvoiceStatus(house.getId(), tenantId);
+
+            AccessStatus status;
+            String reason = null;
+
+            if (!invoiceStatus.depositPaid()) {
+                status = AccessStatus.PENDING_DEPOSIT;
+                reason = "Vui lòng thanh toán tiền cọc để được nhận nhà.";
+            } else if (house.getHandoverDate() != null && now.isBefore(house.getHandoverDate())) {
+                status = AccessStatus.PENDING_HANDOVER;
+                reason = "Ngày nhận nhà là " + DMY.format(house.getHandoverDate()) + ". Vui lòng quay lại sau.";
+            } else if (!invoiceStatus.firstRentPaid()) {
+                status = AccessStatus.PENDING_FIRST_RENT;
+                reason = "Bạn có hóa đơn tiền thuê tháng đầu chưa thanh toán.";
+            } else {
+                status = AccessStatus.ACCESSIBLE;
+            }
+
+            return new HouseAccessStatus(
+                    house.getId(),
+                    house.getName(),
+                    house.getAddress(),
+                    house.getHandoverDate(),
+                    status,
+                    reason,
+                    invoiceStatus.pendingInvoiceId() != null,
+                    invoiceStatus.pendingInvoiceId()
+            );
+        }).toList();
     }
 }

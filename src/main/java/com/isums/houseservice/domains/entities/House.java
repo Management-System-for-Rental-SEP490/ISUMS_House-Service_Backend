@@ -47,6 +47,9 @@ public class House {
     @Column(columnDefinition = "text")
     private String description;
 
+    @Column(name = "handover_date")
+    private Instant handoverDate;
+
     @Enumerated(EnumType.STRING)
     private HouseStatus status;
 

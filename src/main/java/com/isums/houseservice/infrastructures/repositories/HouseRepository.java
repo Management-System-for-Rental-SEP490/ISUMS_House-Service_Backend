@@ -14,4 +14,6 @@ public interface HouseRepository extends JpaRepository<House, UUID> {
     Optional<House> findWithFunctionalAreasById(UUID id);
 
     List<House> findByUserRentalId(UUID userRentalId);
+
+    List<House> findByTenantId(UUID tenantId);
 }
