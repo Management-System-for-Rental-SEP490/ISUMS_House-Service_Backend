@@ -1,7 +1,7 @@
 package com.isums.houseservice.services;
 
 import com.isums.houseservice.domains.dtos.TenantDto;
-import com.isums.houseservice.domains.entities.Tenant;
+import com.isums.houseservice.domains.entities.TenantGroup;
 import com.isums.houseservice.infrastructures.abstracts.TenantService;
 import com.isums.houseservice.infrastructures.mappers.TenantMapper;
 import com.isums.houseservice.infrastructures.repositories.TenantRepository;
@@ -19,9 +19,9 @@ public class TenantServiceImpl implements TenantService {
 
     @Override
     public TenantDto getTenantByUserId(UUID userId) {
-        Tenant tenant = tenantRepository.findTenantByUserId(userId)
+        TenantGroup tenantGroup = tenantRepository.findTenantByUserId(userId)
                 .orElseThrow(() -> new RuntimeException("Tenant not found"));
         
-        return tenantMapper.toTenantDto(tenant);
+        return tenantMapper.toTenantDto(tenantGroup);
     }
 }

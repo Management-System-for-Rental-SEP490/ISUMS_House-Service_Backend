@@ -69,9 +69,9 @@ public class HouseController {
     @GetMapping("/my-access")
     @PreAuthorize("hasRole('TENANT')")
     @Operation(
-            summary = "Trạng thái truy cập nhà của tenant",
+            summary = "Trạng thái truy cập nhà của tenantGroup",
             description = """
-                        Trả về danh sách nhà tenant được thuê kèm trạng thái:
+                        Trả về danh sách nhà tenantGroup được thuê kèm trạng thái:
                         - ACCESSIBLE: có thể vào nhà
                         - PENDING_HANDOVER: chưa đến ngày nhận nhà
                         - PENDING_DEPOSIT: chưa thanh toán tiền cọc

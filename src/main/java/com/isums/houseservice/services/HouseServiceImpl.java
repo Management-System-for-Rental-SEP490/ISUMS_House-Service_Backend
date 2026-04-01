@@ -2,19 +2,16 @@ package com.isums.houseservice.services;
 
 import com.isums.houseservice.domains.dtos.*;
 import com.isums.houseservice.domains.emuns.AccessStatus;
-import com.isums.houseservice.domains.entities.HouseImage;
-import com.isums.houseservice.domains.entities.Region;
+import com.isums.houseservice.domains.emuns.HouseMemberRole;
+import com.isums.houseservice.domains.entities.*;
 import com.isums.houseservice.exceptions.NotFoundException;
 import com.isums.houseservice.infrastructures.abstracts.HouseService;
 import com.isums.houseservice.domains.emuns.HouseStatus;
-import com.isums.houseservice.domains.entities.House;
 import com.isums.houseservice.infrastructures.grpcs.PaymentGrpcClient;
 import com.isums.houseservice.infrastructures.grpcs.UserClientsGrpc;
 import com.isums.houseservice.infrastructures.kafkas.HouseEventProducer;
 import com.isums.houseservice.infrastructures.mappers.HouseMapper;
-import com.isums.houseservice.infrastructures.repositories.HouseImageRepository;
-import com.isums.houseservice.infrastructures.repositories.HouseRepository;
-import com.isums.houseservice.infrastructures.repositories.RegionRepository;
+import com.isums.houseservice.infrastructures.repositories.*;
 import com.isums.userservice.grpc.UserResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -44,6 +41,8 @@ public class HouseServiceImpl implements HouseService {
     private final HouseImageRepository houseImageRepository;
     private final UserClientsGrpc userClientsGrpc;
     private final PaymentGrpcClient paymentGrpcClient;
+    private final TenantGroupRepository tenantGroupRepository;
+    private final TenantMemberRepository tenantMemberRepository;
 
     private static final DateTimeFormatter DMY = DateTimeFormatter
             .ofPattern("dd/MM/yyyy")
@@ -58,7 +57,6 @@ public class HouseServiceImpl implements HouseService {
                 .name(req.name())
                 .address(req.address())
                 .region(region)
-                .ward(req.ward())
                 .commune(req.commune())
                 .city(req.city())
                 .description(req.description())
@@ -160,36 +158,61 @@ public class HouseServiceImpl implements HouseService {
     public void activeHouseForUser(UUID userId, UUID houseId, Instant handoverDate) {
         House house = houseRepository.findById(houseId)
                 .orElseThrow(() -> new NotFoundException("House not found: " + houseId));
+
+        TenantGroup group = tenantGroupRepository.findByHouseId(houseId)
+                .orElseGet(() -> tenantGroupRepository.save(TenantGroup.builder()
+                        .houseId(houseId)
+                        .isActive(true)
+                        .build()));
+
+        TenantMemberId memberId = new TenantMemberId();
+        memberId.setTenantId(group.getId());
+        memberId.setUserId(userId);
+
+        if (!tenantMemberRepository.existsById(memberId)) {
+            tenantMemberRepository.save(TenantMember.builder()
+                    .id(memberId)
+                    .tenantGroup(group)
+                    .isOwner(true)
+                    .isActive(true)
+                    .build());
+        }
+
         house.setUserRentalId(userId);
-        house.setTenantId(userId);
+        house.setTenantGroupId(group.getId());
         house.setHandoverDate(handoverDate);
         house.setStatus(HouseStatus.RENTED);
         houseRepository.save(house);
-        log.info("[House] Activated houseId={} tenantId={} handoverDate={}", houseId, userId, handoverDate);
+
+        log.info("[House] Activated houseId={} ownerId={}", houseId, userId);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<HouseAccessStatus> getMyHouseAccess(UUID tenantId) {
-        List<House> houses = houseRepository.findByTenantId(tenantId);
+    public List<HouseAccessStatus> getMyHouseAccess(UUID userId) {
+        List<House> houses = houseRepository.findByTenantGroupMemberUserId(userId);
 
         return houses.stream().map(house -> {
             Instant now = Instant.now();
 
-            InvoiceStatusDto invoiceStatus = paymentGrpcClient.getInvoiceStatus(house.getId(), tenantId);
+            HouseMemberRole role = userId.equals(house.getUserRentalId())
+                    ? HouseMemberRole.OWNER
+                    : HouseMemberRole.MEMBER;
+
+            InvoiceStatusDto invoiceStatus = paymentGrpcClient.getInvoiceStatus(house.getId(), userId);
 
             AccessStatus status;
             String reason = null;
 
             if (!invoiceStatus.depositPaid()) {
                 status = AccessStatus.PENDING_DEPOSIT;
-                reason = "Vui lòng thanh toán tiền cọc để được nhận nhà.";
+                reason = "ACCESS_PENDING_DEPOSIT";
             } else if (house.getHandoverDate() != null && now.isBefore(house.getHandoverDate())) {
                 status = AccessStatus.PENDING_HANDOVER;
-                reason = "Ngày nhận nhà là " + DMY.format(house.getHandoverDate()) + ". Vui lòng quay lại sau.";
+                reason = "ACCESS_PENDING_HANDOVER";
             } else if (!invoiceStatus.firstRentPaid()) {
                 status = AccessStatus.PENDING_FIRST_RENT;
-                reason = "Bạn có hóa đơn tiền thuê tháng đầu chưa thanh toán.";
+                reason = "ACCESS_PENDING_FIRST_RENT";
             } else {
                 status = AccessStatus.ACCESSIBLE;
             }
@@ -202,7 +225,8 @@ public class HouseServiceImpl implements HouseService {
                     status,
                     reason,
                     invoiceStatus.pendingInvoiceId() != null,
-                    invoiceStatus.pendingInvoiceId()
+                    invoiceStatus.pendingInvoiceId(),
+                    role
             );
         }).toList();
     }
