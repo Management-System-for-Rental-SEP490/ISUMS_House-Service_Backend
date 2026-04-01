@@ -26,17 +26,14 @@ public class House {
     @Column(name = "user_rental_id")
     private UUID userRentalId;
 
-    @Column(name = "tenant_id")
-    private UUID tenantId;
+    @Column(name = "tenant_group_id")
+    private UUID tenantGroupId;
 
     @Column(columnDefinition = "text")
     private String name;
 
     @Column(columnDefinition = "text")
     private String address;
-
-    @Column(columnDefinition = "text")
-    private String ward;
 
     @Column(columnDefinition = "text")
     private String commune;

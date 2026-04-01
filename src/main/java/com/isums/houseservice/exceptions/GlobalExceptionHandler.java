@@ -88,4 +88,20 @@ public class GlobalExceptionHandler {
         );
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(res);
     }
+
+    @ExceptionHandler(HouseException.class)
+    public ResponseEntity<ApiResponse<Void>> handleHouseException(HouseException ex) {
+        HttpStatus status = HttpStatus.resolve(ex.getHttpStatus());
+        if (status == null) status = HttpStatus.INTERNAL_SERVER_ERROR;
+
+        ApiResponse<Void> res = ApiResponses.fail(
+                status,
+                ex.getCode().name(),
+                List.of(ApiError.builder()
+                        .code(ex.getCode().name())
+                        .message(ex.getCode().name())
+                        .build())
+        );
+        return ResponseEntity.status(status).body(res);
+    }
 }
