@@ -17,5 +17,13 @@ public interface HouseRepository extends JpaRepository<House, UUID> {
     Optional<UUID> findRegionIdByHouseId(UUID houseId);
     List<House> findByUserRentalId(UUID userRentalId);
 
-    List<House> findByTenantId(UUID tenantId);
+    @Query("""
+    SELECT h FROM House h
+    JOIN TenantGroup g ON g.houseId = h.id
+    JOIN TenantMember m ON m.id.tenantId = g.id
+    WHERE m.id.userId = :userId
+    AND m.isActive = true
+    AND g.isActive = true
+""")
+    List<House> findByTenantGroupMemberUserId(UUID userId);
 }

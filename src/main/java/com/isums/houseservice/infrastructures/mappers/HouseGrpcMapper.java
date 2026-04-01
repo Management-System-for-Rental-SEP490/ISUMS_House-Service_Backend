@@ -6,14 +6,15 @@ import com.isums.houseservice.domains.entities.FunctionalArea;
 import com.isums.houseservice.domains.entities.House;
 import com.isums.houseservice.grpc.*;
 import lombok.NoArgsConstructor;
-import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 
+@Service
 @NoArgsConstructor
 public class HouseGrpcMapper {
 
-    public static HouseResponse toHouseResponse(House house) {
+    public HouseResponse toHouseResponse(House house) {
         HouseResponse.Builder builder = HouseResponse.newBuilder()
                 .setId(uuidToString(house.getId()))
                 .setUserRentalId(uuidToString(house.getUserRentalId()))
@@ -32,10 +33,14 @@ public class HouseGrpcMapper {
                 builder.addFunctionalAreas(toFunctionalAreaResponse(fa));
             }
         }
+
+        if (house.getRegion() != null) {
+            builder.setRegionId(uuidToString(house.getRegion().getId()));
+        }
         return builder.build();
     }
 
-    private static FunctionalAreaResponse toFunctionalAreaResponse(FunctionalArea fa) {
+    private FunctionalAreaResponse toFunctionalAreaResponse(FunctionalArea fa) {
         return FunctionalAreaResponse.newBuilder()
                 .setId(uuidToString(fa.getId()))
                 .setName(nullToEmpty(fa.getName()))
@@ -48,20 +53,20 @@ public class HouseGrpcMapper {
                 .build();
     }
 
-    private static String nullToEmpty(String s) {
+    private String nullToEmpty(String s) {
         return s == null ? "" : s;
     }
 
-    private static String uuidToString(java.util.UUID id) {
+    private String uuidToString(java.util.UUID id) {
         return id == null ? "" : id.toString();
     }
 
-    private static Timestamp toTimestamp(Instant instant) {
+    private Timestamp toTimestamp(Instant instant) {
         return instant == null ? Timestamp.getDefaultInstance()
                 : Timestamps.fromMillis(instant.toEpochMilli());
     }
 
-    private static HouseStatus mapHouseStatus(com.isums.houseservice.domains.emuns.HouseStatus s) {
+    private HouseStatus mapHouseStatus(com.isums.houseservice.domains.emuns.HouseStatus s) {
         if (s == null) return HouseStatus.HOUSE_STATUS_UNSPECIFIED;
         return switch (s) {
             case AVAILABLE -> HouseStatus.HOUSE_STATUS_AVAILABLE;
@@ -70,7 +75,7 @@ public class HouseGrpcMapper {
         };
     }
 
-    private static AreaType mapAreaType(com.isums.houseservice.domains.emuns.AreaType t) {
+    private AreaType mapAreaType(com.isums.houseservice.domains.emuns.AreaType t) {
         if (t == null) return AreaType.AREA_TYPE_UNSPECIFIED;
         return switch (t) {
             case KITCHEN -> AreaType.AREA_TYPE_KITCHEN;
@@ -84,7 +89,7 @@ public class HouseGrpcMapper {
         };
     }
 
-    private static FunctionalAreaStatus mapFunctionalAreaStatus(com.isums.houseservice.domains.emuns.FuctionalAreaStatus s) {
+    private FunctionalAreaStatus mapFunctionalAreaStatus(com.isums.houseservice.domains.emuns.FuctionalAreaStatus s) {
         if (s == null) return FunctionalAreaStatus.FUNCTIONAL_AREA_STATUS_UNSPECIFIED;
         return switch (s) {
             case REPAIRED -> FunctionalAreaStatus.FUNCTIONAL_AREA_STATUS_REPAIRED;
