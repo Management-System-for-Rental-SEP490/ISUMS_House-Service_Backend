@@ -3,12 +3,15 @@ package com.isums.houseservice.infrastructures.grpcs;
 import com.isums.houseservice.domains.entities.House;
 import com.isums.houseservice.infrastructures.mappers.HouseGrpcMapper;
 import com.isums.houseservice.grpc.*;
+import com.isums.houseservice.infrastructures.mappers.HouseMapper;
 import com.isums.houseservice.infrastructures.repositories.HouseRepository;
 import com.isums.houseservice.infrastructures.repositories.RegionStaffRepository;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,9 +20,11 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class HouseGrpcImpl extends HouseServiceGrpc.HouseServiceImplBase {
     private final HouseRepository houseRepository;
     private final RegionStaffRepository regionStaffRepository;
+    private final HouseGrpcMapper houseGrpcMapper;
 
     @Override
     @Transactional(readOnly = true)
@@ -41,7 +46,7 @@ public class HouseGrpcImpl extends HouseServiceGrpc.HouseServiceImplBase {
                 return;
             }
 
-            HouseResponse res = HouseGrpcMapper.toHouseResponse(house.get());
+            HouseResponse res = houseGrpcMapper.toHouseResponse(house.get());
 
             responseObserver.onNext(res);
             responseObserver.onCompleted();
@@ -54,8 +59,7 @@ public class HouseGrpcImpl extends HouseServiceGrpc.HouseServiceImplBase {
 
     @Override
     @Transactional(readOnly = true)
-    public void getRegionIdByHouseId(GetHouseRequest request,
-                                     StreamObserver<GetRegionResponse> responseObserver) {
+    public void getRegionIdByHouseId(GetHouseRequest request, StreamObserver<GetRegionResponse> responseObserver) {
 
         UUID houseId;
 
@@ -97,9 +101,9 @@ public class HouseGrpcImpl extends HouseServiceGrpc.HouseServiceImplBase {
 
     @Override
     public void getStaffByRegion(GetRegionRequest request, StreamObserver<GetStaffByRegionResponse> responseObserver) {
-        try{
+        try {
             UUID regionId;
-            try{
+            try {
                 regionId = UUID.fromString(request.getRegionId());
             } catch (IllegalArgumentException e) {
                 responseObserver.onError(Status.INVALID_ARGUMENT.withDescription("region_id is not a valid UUID").asRuntimeException());
@@ -118,6 +122,39 @@ public class HouseGrpcImpl extends HouseServiceGrpc.HouseServiceImplBase {
             responseObserver.onCompleted();
 
         } catch (Exception ex) {
+            responseObserver.onError(
+                    Status.INTERNAL.withDescription("Internal server error").withCause(ex).asRuntimeException()
+            );
+        }
+    }
+
+    @Override
+    public void getAllHouseByUser(GetHouseByUserRequest request, StreamObserver<ListHouseResponse> responseObserver) {
+        try {
+
+            String userId = request.getUserId().trim();
+            if (userId.isBlank()) {
+                responseObserver.onError(Status.INVALID_ARGUMENT.withDescription("userId is required").asRuntimeException());
+                return;
+            }
+
+            List<House> houses = houseRepository.findByUserRentalId(UUID.fromString(request.getUserId()));
+
+            ListHouseResponse.Builder res = ListHouseResponse.newBuilder();
+
+            for (House house : houses) {
+                res.addHouse(houseGrpcMapper.toHouseResponse(house));
+            }
+
+            responseObserver.onNext(res.build());
+            responseObserver.onCompleted();
+        } catch (DataAccessException dae) {
+            log.error("DB error in getAllHouseByUser", dae);
+            responseObserver.onError(
+                    Status.UNAVAILABLE.withDescription("Database unavailable").withCause(dae).asRuntimeException()
+            );
+        } catch (Exception ex) {
+            log.error("Unexpected error in getAllHouseByUser", ex);
             responseObserver.onError(
                     Status.INTERNAL.withDescription("Internal server error").withCause(ex).asRuntimeException()
             );
