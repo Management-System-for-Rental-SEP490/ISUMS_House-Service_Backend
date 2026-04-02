@@ -8,4 +8,6 @@ import java.util.UUID;
 
 public interface TenantGroupRepository extends JpaRepository<TenantGroup, UUID> {
     Optional<TenantGroup> findByHouseId(UUID houseId);
+
+    Optional<TenantGroup> findByHouseIdAndIsActiveTrue(UUID houseId);
 }
