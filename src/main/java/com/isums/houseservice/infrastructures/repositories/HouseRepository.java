@@ -34,12 +34,16 @@ public interface HouseRepository extends JpaRepository<House, UUID> {
     List<House> findByNextTenantIdIsNotNullAndNextHandoverDateBefore(Instant now);
 
     @Query("""
-                SELECT h FROM House h
-                WHERE h.nextTenantId = :userId
-                OR EXISTS (
-                    SELECT 1 FROM TenantGroup g JOIN TenantMember m ON m.id.tenantId = g.id
-                    WHERE g.houseId = h.id AND m.id.userId = :userId AND m.isActive = true AND g.isActive = true
-                )
-            """)
+    SELECT h FROM House h
+    WHERE h.nextTenantId = :userId
+    OR EXISTS (
+        SELECT 1 FROM TenantGroup g
+        JOIN TenantMember m ON m.id.tenantId = g.id
+        WHERE g.houseId = h.id
+        AND m.id.userId = :userId
+        AND m.isActive = true
+        AND g.isActive = true
+    )
+""")
     List<House> findAccessibleByUserId(UUID userId);
 }

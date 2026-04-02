@@ -3,10 +3,7 @@ package com.isums.houseservice.domains.entities;
 import com.isums.houseservice.domains.emuns.AreaType;
 import com.isums.houseservice.domains.emuns.FuctionalAreaStatus;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.annotations.UuidGenerator;
 
@@ -26,6 +23,7 @@ public class FunctionalArea {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @ToString.Exclude
     @JoinColumn(name = "house_id", nullable = false)
     private House house;
 

@@ -157,8 +157,7 @@ public class HouseServiceImpl implements HouseService {
     @Override
     @Transactional
     public void activeHouseForUser(UUID userId, UUID houseId, Instant handoverDate) {
-        House house = houseRepository.findById(houseId)
-                .orElseThrow(() -> new NotFoundException("House not found: " + houseId));
+        House house = houseRepository.findById(houseId).orElseThrow(() -> new NotFoundException("House not found: " + houseId));
 
         boolean houseCurrentlyOccupied = house.getUserRentalId() != null
                 && house.getStatus() == HouseStatus.RENTED
@@ -182,10 +181,12 @@ public class HouseServiceImpl implements HouseService {
     @Override
     @Transactional(readOnly = true)
     public List<HouseAccessStatus> getMyHouseAccess(UUID userId) {
-        List<House> houses = houseRepository.findByTenantGroupMemberUserId(userId);
+        List<House> houses = houseRepository.findAccessibleByUserId(userId);
 
         return houses.stream().map(house -> {
             Instant now = Instant.now();
+
+            boolean isPendingNext = userId.equals(house.getNextTenantId());
 
             HouseMemberRole role = userId.equals(house.getUserRentalId())
                     ? HouseMemberRole.OWNER
@@ -199,6 +200,10 @@ public class HouseServiceImpl implements HouseService {
             if (!invoiceStatus.depositPaid()) {
                 status = AccessStatus.PENDING_DEPOSIT;
                 reason = "ACCESS_PENDING_DEPOSIT";
+            } else if (isPendingNext && house.getNextHandoverDate() != null
+                    && now.isBefore(house.getNextHandoverDate())) {
+                status = AccessStatus.PENDING_HANDOVER;
+                reason = "ACCESS_PENDING_HANDOVER";
             } else if (house.getHandoverDate() != null && now.isBefore(house.getHandoverDate())) {
                 status = AccessStatus.PENDING_HANDOVER;
                 reason = "ACCESS_PENDING_HANDOVER";
@@ -213,7 +218,7 @@ public class HouseServiceImpl implements HouseService {
                     house.getId(),
                     house.getName(),
                     house.getAddress(),
-                    house.getHandoverDate(),
+                    isPendingNext ? house.getNextHandoverDate() : house.getHandoverDate(),
                     status,
                     reason,
                     invoiceStatus.pendingInvoiceId() != null,

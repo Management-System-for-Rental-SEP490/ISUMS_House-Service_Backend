@@ -16,8 +16,11 @@ public class CorsConfig {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(List.of(
                 "http://localhost:5173/",
-                "http://127.0.0.1:5173",
-                "https://e457-2402-800-be08-887d-8914-14e9-bbf0-6545.ngrok-free.app"
+                "http://localhost:5173",
+                "http://localhost:8000/",
+                "http://localhost:8000",
+                "https://autopsic-kristan-sublabially.ngrok-free.dev",
+                "https://autopsic-kristan-sublabially.ngrok-free.dev/"
         ));
         config.setAllowedMethods(List.of("GET","POST","PUT","PATCH","DELETE","OPTIONS"));
         config.addAllowedHeader("*");
