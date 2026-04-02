@@ -22,5 +22,5 @@ public interface HouseService {
     void deleteHouseImage(UUID houseId, UUID imageId);
     void activeHouseForUser(UUID userId, UUID houseId, Instant handoverDate);
 
-    List<HouseAccessStatus> getMyHouseAccess(UUID tenantId);
+    public List<HouseAccessStatus> getMyHouseAccess(String keycloakId);
 }

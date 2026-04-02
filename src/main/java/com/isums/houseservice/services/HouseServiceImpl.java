@@ -180,7 +180,9 @@ public class HouseServiceImpl implements HouseService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<HouseAccessStatus> getMyHouseAccess(UUID userId) {
+    public List<HouseAccessStatus> getMyHouseAccess(String keycloakId) {
+        UserResponse user = userClientsGrpc.getUserIdAndRoleByKeyCloakId(keycloakId);
+        UUID userId = UUID.fromString(user.getId());
         List<House> houses = houseRepository.findAccessibleByUserId(userId);
 
         return houses.stream().map(house -> {
