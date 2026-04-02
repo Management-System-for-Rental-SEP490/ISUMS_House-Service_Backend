@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -159,32 +160,23 @@ public class HouseServiceImpl implements HouseService {
         House house = houseRepository.findById(houseId)
                 .orElseThrow(() -> new NotFoundException("House not found: " + houseId));
 
-        TenantGroup group = tenantGroupRepository.findByHouseId(houseId)
-                .orElseGet(() -> tenantGroupRepository.save(TenantGroup.builder()
-                        .houseId(houseId)
-                        .isActive(true)
-                        .build()));
+        boolean houseCurrentlyOccupied = house.getUserRentalId() != null
+                && house.getStatus() == HouseStatus.RENTED
+                && house.getHandoverDate() != null
+                && Instant.now().isBefore(house.getHandoverDate().plus(contractEndBuffer()));
 
-        TenantMemberId memberId = new TenantMemberId();
-        memberId.setTenantId(group.getId());
-        memberId.setUserId(userId);
+        if (houseCurrentlyOccupied && handoverDate != null && handoverDate.isAfter(Instant.now())) {
+            house.setNextTenantId(userId);
+            house.setNextHandoverDate(handoverDate);
+            houseRepository.save(house);
 
-        if (!tenantMemberRepository.existsById(memberId)) {
-            tenantMemberRepository.save(TenantMember.builder()
-                    .id(memberId)
-                    .tenantGroup(group)
-                    .isOwner(true)
-                    .isActive(true)
-                    .build());
+            createPendingTenantGroup(userId, houseId);
+
+            log.info("[House] Pending next tenant userId={} houseId={} handoverDate={}",
+                    userId, houseId, handoverDate);
+        } else {
+            activateNow(house, userId, handoverDate);
         }
-
-        house.setUserRentalId(userId);
-        house.setTenantGroupId(group.getId());
-        house.setHandoverDate(handoverDate);
-        house.setStatus(HouseStatus.RENTED);
-        houseRepository.save(house);
-
-        log.info("[House] Activated houseId={} ownerId={}", houseId, userId);
     }
 
     @Override
@@ -229,5 +221,72 @@ public class HouseServiceImpl implements HouseService {
                     role
             );
         }).toList();
+    }
+
+    private void createPendingTenantGroup(UUID userId, UUID houseId) {
+        TenantGroup group = tenantGroupRepository.findByHouseId(houseId)
+                .filter(g -> !g.isActive())
+                .orElseGet(() -> tenantGroupRepository.save(TenantGroup.builder()
+                        .houseId(houseId)
+                        .isActive(false)
+                        .build()));
+
+        TenantMemberId memberId = new TenantMemberId();
+        memberId.setTenantId(group.getId());
+        memberId.setUserId(userId);
+
+        if (!tenantMemberRepository.existsById(memberId)) {
+            tenantMemberRepository.save(TenantMember.builder()
+                    .id(memberId)
+                    .tenantGroup(group)
+                    .isOwner(true)
+                    .isActive(false)
+                    .build());
+        }
+
+        log.info("[House] Pending TenantGroup created for userId={} houseId={}", userId, houseId);
+    }
+
+    private void activateNow(House house, UUID userId, Instant handoverDate) {
+        if (house.getTenantGroupId() != null) {
+            tenantGroupRepository.findById(house.getTenantGroupId()).ifPresent(g -> {
+                g.setActive(false);
+                tenantGroupRepository.save(g);
+            });
+        }
+
+        TenantGroup group = tenantGroupRepository.findByHouseIdAndIsActiveTrue(house.getId())
+                .filter(g -> tenantMemberRepository.existsByTenantGroupIdAndUserId(g.getId(), userId))
+                .orElseGet(() -> tenantGroupRepository.save(TenantGroup.builder()
+                        .houseId(house.getId())
+                        .isActive(true)
+                        .build()));
+
+        TenantMemberId memberId = new TenantMemberId();
+        memberId.setTenantId(group.getId());
+        memberId.setUserId(userId);
+
+        if (!tenantMemberRepository.existsById(memberId)) {
+            tenantMemberRepository.save(TenantMember.builder()
+                    .id(memberId)
+                    .tenantGroup(group)
+                    .isOwner(true)
+                    .isActive(true)
+                    .build());
+        }
+
+        house.setUserRentalId(userId);
+        house.setTenantGroupId(group.getId());
+        house.setHandoverDate(handoverDate);
+        house.setNextTenantId(null);
+        house.setNextHandoverDate(null);
+        house.setStatus(HouseStatus.RENTED);
+        houseRepository.save(house);
+
+        log.info("[House] Activated houseId={} ownerId={}", house.getId(), userId);
+    }
+
+    private Duration contractEndBuffer() {
+        return Duration.ofDays(1);
     }
 }

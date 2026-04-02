@@ -129,6 +129,7 @@ public class HouseGrpcImpl extends HouseServiceGrpc.HouseServiceImplBase {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public void getAllHouseByUser(GetHouseByUserRequest request, StreamObserver<ListHouseResponse> responseObserver) {
         try {
 

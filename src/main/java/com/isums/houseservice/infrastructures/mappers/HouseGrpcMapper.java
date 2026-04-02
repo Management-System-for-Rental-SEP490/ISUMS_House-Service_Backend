@@ -20,7 +20,6 @@ public class HouseGrpcMapper {
                 .setUserRentalId(uuidToString(house.getUserRentalId()))
                 .setName(nullToEmpty(house.getName()))
                 .setAddress(nullToEmpty(house.getAddress()))
-                .setWard(nullToEmpty(house.getWard()))
                 .setCommune(nullToEmpty(house.getCommune()))
                 .setCity(nullToEmpty(house.getCity()))
                 .setDescription(nullToEmpty(house.getDescription()))
