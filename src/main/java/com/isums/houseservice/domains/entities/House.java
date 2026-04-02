@@ -71,6 +71,8 @@ public class House {
     private Instant updatedAt;
 
     @OneToMany(mappedBy = "house")
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     private List<InstalledDevice> devices = new ArrayList<>();
 
     @ManyToOne
