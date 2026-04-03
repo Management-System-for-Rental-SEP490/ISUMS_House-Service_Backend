@@ -9,6 +9,7 @@ import com.isums.houseservice.domains.entities.RegionStaffId;
 import com.isums.houseservice.infrastructures.abstracts.RegionService;
 import com.isums.houseservice.infrastructures.mappers.RegionMapper;
 import com.isums.houseservice.infrastructures.repositories.RegionRepository;
+import com.isums.houseservice.infrastructures.repositories.RegionStaffRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,36 +25,37 @@ import java.util.stream.Collectors;
 public class RegionServiceImpl implements RegionService {
     private final RegionRepository regionRepository;
     private final RegionMapper regionMapper;
+    private final RegionStaffRepository regionStaffRepository;
 
     @Override
     public RegionDto createRegion(CreateRegionRequest request) {
-        try{
+        try {
             Region region = Region.builder()
                     .name(request.name())
                     .description(request.description())
                     .managerId(request.managerId())
                     .build();
 
-            Region savedRegion = regionRepository.save(region);
+            regionRepository.save(region);
 
             if (request.technicalStaffIds() != null && !request.technicalStaffIds().isEmpty()) {
 
                 List<RegionStaff> staffs = request.technicalStaffIds().stream()
+                        .distinct()
                         .map(staffId -> RegionStaff.builder()
-                                .id(new RegionStaffId(savedRegion.getId(), staffId))
-                                .region(savedRegion)
+                                .id(new RegionStaffId(region.getId(), staffId))
+                                .region(region)
                                 .build()
                         )
                         .toList();
 
-                savedRegion.setStaffs(staffs);
+                regionStaffRepository.saveAll(staffs);
             }
 
-            Region created = regionRepository.save(savedRegion);
+            return regionMapper.mapRegion(region);
 
-            return regionMapper.mapRegion(created);
         } catch (Exception ex) {
-            throw new RuntimeException("Error to create region : " + ex.getMessage());
+            throw new RuntimeException("Error to create region: " + ex.getMessage());
         }
     }
 
@@ -85,7 +87,7 @@ public class RegionServiceImpl implements RegionService {
     public RegionDto updateRegion(UUID id, UpdateRegionRequest request) {
         try{
             Region region = regionRepository.findById(id)
-                    .orElseThrow(()-> new RuntimeException("Id not found"));
+                    .orElseThrow(()-> new RuntimeException("Region not found"));
 
             if(request.name() != null){
                 region.setName(request.name());
@@ -96,34 +98,84 @@ public class RegionServiceImpl implements RegionService {
 
             if (request.technicalStaffIds() != null) {
 
-                Set<UUID> currentStaffIds = region.getStaffs().stream()
-                        .map(s -> s.getId().getStaffId())
+                List<RegionStaff> current = regionStaffRepository.findByIdRegionId(id);
+
+                Set<UUID> currentIds = current.stream()
+                        .map(rs -> rs.getId().getStaffId())
                         .collect(Collectors.toSet());
 
-                Set<UUID> newStaffIds = new HashSet<>(request.technicalStaffIds());
+                Set<UUID> newIds = new HashSet<>(request.technicalStaffIds());
 
-                region.getStaffs().removeIf(s ->
-                        !newStaffIds.contains(s.getId().getStaffId())
-                );
+                List<RegionStaff> toRemove = current.stream()
+                        .filter(rs -> !newIds.contains(rs.getId().getStaffId()))
+                        .toList();
 
-                for (UUID staffId : newStaffIds) {
-                    if (!currentStaffIds.contains(staffId)) {
-                        RegionStaff rs = RegionStaff.builder()
-                                .id(new RegionStaffId(region.getId(), staffId))
+                regionStaffRepository.deleteAll(toRemove);
+
+                List<RegionStaff> toAdd = newIds.stream()
+                        .filter(staffId -> !currentIds.contains(staffId))
+                        .map(staffId -> RegionStaff.builder()
+                                .id(new RegionStaffId(id, staffId))
                                 .region(region)
-                                .build();
+                                .build())
+                        .toList();
 
-                        region.getStaffs().add(rs);
-                    }
-                }
+                regionStaffRepository.saveAll(toAdd);
             }
 
-                Region updated = regionRepository.save(region);
+
+            Region updated = regionRepository.save(region);
 
                 return regionMapper.mapRegion(updated);
 
         } catch (Exception ex) {
             throw new RuntimeException("Error to get asset item: " + ex.getMessage());
         }
+    }
+
+    @Override
+    @Transactional
+    public RegionDto addStaffToRegion(UUID regionId, UUID staffId) {
+
+        Region region = regionRepository.findById(regionId)
+                .orElseThrow(() -> new RuntimeException("Region not found"));
+
+        RegionStaffId id = new RegionStaffId(regionId, staffId);
+
+        if (!regionStaffRepository.existsById(id)) {
+            RegionStaff rs = RegionStaff.builder()
+                    .id(id)
+                    .region(region)
+                    .build();
+
+            regionStaffRepository.save(rs);
+        }
+
+        // 🔥 lấy lại staffIds
+        List<UUID> staffIds = regionStaffRepository.findByIdRegionId(regionId)
+                .stream()
+                .map(s -> s.getId().getStaffId())
+                .toList();
+
+        return regionMapper.mapRegion(region, staffIds);
+    }
+
+    @Override
+    @Transactional
+    public RegionDto removeStaffFromRegion(UUID regionId, UUID staffId) {
+
+        Region region = regionRepository.findById(regionId)
+                .orElseThrow(() -> new RuntimeException("Region not found"));
+
+        RegionStaffId id = new RegionStaffId(regionId, staffId);
+
+        regionStaffRepository.deleteById(id);
+
+        List<UUID> staffIds = regionStaffRepository.findByIdRegionId(regionId)
+                .stream()
+                .map(s -> s.getId().getStaffId())
+                .toList();
+
+        return regionMapper.mapRegion(region, staffIds);
     }
 }

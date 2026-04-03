@@ -12,4 +12,6 @@ public interface RegionService {
     List<RegionDto> getAllRegions();
     RegionDto getById(UUID id);
     RegionDto updateRegion(UUID id, UpdateRegionRequest request);
+    RegionDto addStaffToRegion(UUID regionId, UUID staffId);
+    RegionDto removeStaffFromRegion(UUID regionId, UUID staffId);
 }
