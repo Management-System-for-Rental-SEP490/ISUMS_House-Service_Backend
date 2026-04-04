@@ -28,31 +28,35 @@ public class RegionServiceImpl implements RegionService {
     private final RegionStaffRepository regionStaffRepository;
 
     @Override
-    public RegionDto createRegion(CreateRegionRequest request) {
+    public RegionDto createRegion(String managerId,CreateRegionRequest request) {
         try {
             Region region = Region.builder()
                     .name(request.name())
                     .description(request.description())
-                    .managerId(request.managerId())
+                    .managerId(UUID.fromString(managerId))
                     .build();
 
             regionRepository.save(region);
 
+            List<UUID> staffIds = List.of();
+
             if (request.technicalStaffIds() != null && !request.technicalStaffIds().isEmpty()) {
 
-                List<RegionStaff> staffs = request.technicalStaffIds().stream()
+                staffIds = request.technicalStaffIds().stream()
                         .distinct()
+                        .toList();
+
+                List<RegionStaff> staffs = staffIds.stream()
                         .map(staffId -> RegionStaff.builder()
                                 .id(new RegionStaffId(region.getId(), staffId))
                                 .region(region)
-                                .build()
-                        )
+                                .build())
                         .toList();
 
                 regionStaffRepository.saveAll(staffs);
             }
 
-            return regionMapper.mapRegion(region);
+            return regionMapper.toDto(region, staffIds);
 
         } catch (Exception ex) {
             throw new RuntimeException("Error to create region: " + ex.getMessage());
@@ -64,7 +68,11 @@ public class RegionServiceImpl implements RegionService {
     public List<RegionDto> getAllRegions() {
         try{
             List<Region> regions = regionRepository.findAll();
-            return regionMapper.mapRegions(regions);
+
+            return regions.stream().map(region -> {
+                List<UUID> staffIds = regionStaffRepository.findStaffIdsByRegionId(region.getId());
+                return regionMapper.toDto(region, staffIds);
+            }).toList();
         } catch (Exception ex) {
             throw new RuntimeException("Error to get asset item: " + ex.getMessage());
         }
@@ -73,11 +81,11 @@ public class RegionServiceImpl implements RegionService {
     @Override
     public RegionDto getById(UUID id) {
         try{
-
             Region region = regionRepository.findById(id)
-                    .orElseThrow(()-> new RuntimeException("Can't not find region"));
+                    .orElseThrow(() -> new RuntimeException("Region not found"));
+            List<UUID> staffIds = regionStaffRepository.findStaffIdsByRegionId(id);
 
-            return regionMapper.mapRegion(region);
+            return regionMapper.toDto(region, staffIds);
         } catch (Exception ex) {
             throw new RuntimeException("Error to get asset item: " + ex.getMessage());
         }
@@ -87,33 +95,36 @@ public class RegionServiceImpl implements RegionService {
     public RegionDto updateRegion(UUID id, UpdateRegionRequest request) {
         try{
             Region region = regionRepository.findById(id)
-                    .orElseThrow(()-> new RuntimeException("Region not found"));
+                    .orElseThrow(() -> new RuntimeException("Region not found"));
 
-            if(request.name() != null){
+            if (request.name() != null) {
                 region.setName(request.name());
             }
-            if(request.description() != null){
+
+            if (request.description() != null) {
                 region.setDescription(request.description());
             }
 
             if (request.technicalStaffIds() != null) {
 
-                List<RegionStaff> current = regionStaffRepository.findByIdRegionId(id);
+                List<UUID> newIds = request.technicalStaffIds().stream()
+                        .distinct()
+                        .toList();
 
-                Set<UUID> currentIds = current.stream()
-                        .map(rs -> rs.getId().getStaffId())
-                        .collect(Collectors.toSet());
+                List<UUID> currentIds = regionStaffRepository.findStaffIdsByRegionId(id);
 
-                Set<UUID> newIds = new HashSet<>(request.technicalStaffIds());
+                Set<UUID> currentSet = new HashSet<>(currentIds);
+                Set<UUID> newSet = new HashSet<>(newIds);
 
-                List<RegionStaff> toRemove = current.stream()
-                        .filter(rs -> !newIds.contains(rs.getId().getStaffId()))
+                List<RegionStaff> toRemove = regionStaffRepository.findByIdRegionId(id)
+                        .stream()
+                        .filter(rs -> !newSet.contains(rs.getId().getStaffId()))
                         .toList();
 
                 regionStaffRepository.deleteAll(toRemove);
 
-                List<RegionStaff> toAdd = newIds.stream()
-                        .filter(staffId -> !currentIds.contains(staffId))
+                List<RegionStaff> toAdd = newSet.stream()
+                        .filter(staffId -> !currentSet.contains(staffId))
                         .map(staffId -> RegionStaff.builder()
                                 .id(new RegionStaffId(id, staffId))
                                 .region(region)
@@ -123,10 +134,11 @@ public class RegionServiceImpl implements RegionService {
                 regionStaffRepository.saveAll(toAdd);
             }
 
+            regionRepository.save(region);
 
-            Region updated = regionRepository.save(region);
+            List<UUID> finalStaffIds = regionStaffRepository.findStaffIdsByRegionId(id);
 
-                return regionMapper.mapRegion(updated);
+            return regionMapper.toDto(region, finalStaffIds);
 
         } catch (Exception ex) {
             throw new RuntimeException("Error to get asset item: " + ex.getMessage());
@@ -136,46 +148,41 @@ public class RegionServiceImpl implements RegionService {
     @Override
     @Transactional
     public RegionDto addStaffToRegion(UUID regionId, UUID staffId) {
+        Region region = regionRepository.findById(regionId)
+                .orElseThrow(() -> new RuntimeException("Region not found"));
 
+        RegionStaffId id = new RegionStaffId(regionId, staffId);
+
+        if (regionStaffRepository.existsById(id)) {
+            throw new RuntimeException("Staff already in region");
+        }
+
+        RegionStaff rs = RegionStaff.builder()
+                .id(id)
+                .region(region)
+                .build();
+        regionStaffRepository.save(rs);
+        List<UUID> staffIds = regionStaffRepository.findStaffIdsByRegionId(regionId);
+
+        return regionMapper.toDto(region, staffIds);
+    }
+
+    @Override
+    @Transactional
+    public RegionDto removeStaffFromRegion(UUID regionId, UUID staffId) {
         Region region = regionRepository.findById(regionId)
                 .orElseThrow(() -> new RuntimeException("Region not found"));
 
         RegionStaffId id = new RegionStaffId(regionId, staffId);
 
         if (!regionStaffRepository.existsById(id)) {
-            RegionStaff rs = RegionStaff.builder()
-                    .id(id)
-                    .region(region)
-                    .build();
-
-            regionStaffRepository.save(rs);
+            throw new RuntimeException("Staff not found in region");
         }
-
-        // 🔥 lấy lại staffIds
-        List<UUID> staffIds = regionStaffRepository.findByIdRegionId(regionId)
-                .stream()
-                .map(s -> s.getId().getStaffId())
-                .toList();
-
-        return regionMapper.mapRegion(region, staffIds);
-    }
-
-    @Override
-    @Transactional
-    public RegionDto removeStaffFromRegion(UUID regionId, UUID staffId) {
-
-        Region region = regionRepository.findById(regionId)
-                .orElseThrow(() -> new RuntimeException("Region not found"));
-
-        RegionStaffId id = new RegionStaffId(regionId, staffId);
 
         regionStaffRepository.deleteById(id);
 
-        List<UUID> staffIds = regionStaffRepository.findByIdRegionId(regionId)
-                .stream()
-                .map(s -> s.getId().getStaffId())
-                .toList();
+        List<UUID> staffIds = regionStaffRepository.findStaffIdsByRegionId(regionId);
 
-        return regionMapper.mapRegion(region, staffIds);
+        return regionMapper.toDto(region, staffIds);
     }
 }
