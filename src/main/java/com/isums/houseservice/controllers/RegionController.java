@@ -10,6 +10,7 @@ import com.isums.houseservice.infrastructures.abstracts.RegionService;
 import com.isums.houseservice.infrastructures.grpcs.UserClientsGrpc;
 import com.isums.userservice.grpc.UserResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
@@ -59,5 +60,11 @@ public class RegionController {
     public ApiResponse<RegionDto> removeStaff(@PathVariable UUID regionId, @PathVariable UUID staffId) {
         RegionDto res = regionService.removeStaffFromRegion(regionId, staffId);
         return ApiResponses.ok(res,"Remove staff from region successfully");
+    }
+
+    @GetMapping("staff/{staffId}")
+    public ApiResponse<List<RegionDto>> getMyRegion(@PathVariable UUID staffId) {
+        List<RegionDto> res = regionService.getRegionByStaffId(staffId);
+        return ApiResponses.ok(res,"Get region by staff successfully");
     }
 }

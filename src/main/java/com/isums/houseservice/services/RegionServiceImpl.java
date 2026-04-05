@@ -185,4 +185,32 @@ public class RegionServiceImpl implements RegionService {
 
         return regionMapper.toDto(region, staffIds);
     }
+
+    @Override
+    @Transactional
+    public List<RegionDto> getRegionByStaffId(UUID staffId) {
+        try {
+            List<RegionStaff> rsList = regionStaffRepository.findAllByIdStaffId(staffId);
+
+            if (rsList.isEmpty()) {
+                throw new RuntimeException("Staff not assigned to any region");
+            }
+
+            return rsList.stream()
+                    .map(rs -> {
+                        Region region = rs.getRegion();
+
+                        List<UUID> staffIds = regionStaffRepository.findByIdRegionId(region.getId())
+                                .stream()
+                                .map(s -> s.getId().getStaffId())
+                                .toList();
+
+                        return regionMapper.toDto(region, staffIds);
+                    })
+                    .toList();
+
+        } catch (Exception ex) {
+            throw new RuntimeException("Cannot get region by staff: " + ex.getMessage());
+        }
+    }
 }
