@@ -179,6 +179,21 @@ public class HouseServiceImpl implements HouseService {
     }
 
     @Override
+    @Transactional
+    public List<HouseDto> getHousesByRegionId(UUID regionId) {
+        try {
+            List<House> houses = houseRepository.findAllByRegionId(regionId);
+
+            return houses.stream()
+                    .map(houseMapper::toDto)
+                    .toList();
+
+        } catch (Exception ex) {
+            throw new RuntimeException("Cannot get houses by region: " + ex.getMessage());
+        }
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public List<HouseAccessStatus> getMyHouseAccess(String keycloakId) {
         UserResponse user = userClientsGrpc.getUserIdAndRoleByKeyCloakId(keycloakId);

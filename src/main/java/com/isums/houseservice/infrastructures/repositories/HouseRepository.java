@@ -46,4 +46,7 @@ public interface HouseRepository extends JpaRepository<House, UUID> {
     )
 """)
     List<House> findAccessibleByUserId(UUID userId);
+
+    @Query("SELECT h FROM House h WHERE h.region.id = :regionId")
+    List<House> findAllByRegionId(UUID regionId);
 }

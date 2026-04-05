@@ -8,6 +8,6 @@ public record RegionDto (
             String name,
             String description,
             UUID managerId,
-            List<UUID> technicalStaffIds
+            List<UUID> staffIds
     ) {}
 

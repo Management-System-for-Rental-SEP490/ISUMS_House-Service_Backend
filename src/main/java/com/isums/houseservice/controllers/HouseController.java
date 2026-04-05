@@ -89,4 +89,11 @@ public class HouseController {
 
         return ApiResponses.ok(statuses, "Success");
     }
+
+    @GetMapping("/region/{regionId}")
+    public ApiResponse<List<HouseDto>> getHousesByRegionId(@PathVariable UUID regionId) {
+        List<HouseDto> res = houseService.getHousesByRegionId(regionId);
+        return ApiResponses.ok(res, "Success");
+    }
+
 }
