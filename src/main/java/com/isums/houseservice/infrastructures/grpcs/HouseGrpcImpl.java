@@ -3,7 +3,6 @@ package com.isums.houseservice.infrastructures.grpcs;
 import com.isums.houseservice.domains.entities.House;
 import com.isums.houseservice.infrastructures.mappers.HouseGrpcMapper;
 import com.isums.houseservice.grpc.*;
-import com.isums.houseservice.infrastructures.mappers.HouseMapper;
 import com.isums.houseservice.infrastructures.repositories.HouseRepository;
 import com.isums.houseservice.infrastructures.repositories.RegionStaffRepository;
 import io.grpc.Status;
