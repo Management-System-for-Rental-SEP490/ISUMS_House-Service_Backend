@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -156,12 +157,130 @@ public class HouseServiceImpl implements HouseService {
     @Override
     @Transactional
     public void activeHouseForUser(UUID userId, UUID houseId, Instant handoverDate) {
-        House house = houseRepository.findById(houseId)
-                .orElseThrow(() -> new NotFoundException("House not found: " + houseId));
+        House house = houseRepository.findById(houseId).orElseThrow(() -> new NotFoundException("House not found: " + houseId));
 
+        boolean houseCurrentlyOccupied = house.getUserRentalId() != null
+                && house.getStatus() == HouseStatus.RENTED
+                && house.getHandoverDate() != null
+                && Instant.now().isBefore(house.getHandoverDate().plus(contractEndBuffer()));
+
+        if (houseCurrentlyOccupied && handoverDate != null && handoverDate.isAfter(Instant.now())) {
+            house.setNextTenantId(userId);
+            house.setNextHandoverDate(handoverDate);
+            houseRepository.save(house);
+
+            createPendingTenantGroup(userId, houseId);
+
+            log.info("[House] Pending next tenant userId={} houseId={} handoverDate={}",
+                    userId, houseId, handoverDate);
+        } else {
+            activateNow(house, userId, handoverDate);
+        }
+    }
+
+    @Override
+    @Transactional
+    public List<HouseDto> getHousesByRegionId(UUID regionId) {
+        try {
+            List<House> houses = houseRepository.findAllByRegionId(regionId);
+
+            return houses.stream()
+                    .map(houseMapper::toDto)
+                    .toList();
+
+        } catch (Exception ex) {
+            throw new RuntimeException("Cannot get houses by region: " + ex.getMessage());
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<HouseAccessStatus> getMyHouseAccess(String keycloakId) {
+        UserResponse user = userClientsGrpc.getUserIdAndRoleByKeyCloakId(keycloakId);
+        UUID userId = UUID.fromString(user.getId());
+        List<House> houses = houseRepository.findAccessibleByUserId(userId);
+
+        return houses.stream().map(house -> {
+            Instant now = Instant.now();
+
+            boolean isPendingNext = userId.equals(house.getNextTenantId());
+
+            HouseMemberRole role = userId.equals(house.getUserRentalId())
+                    ? HouseMemberRole.OWNER
+                    : HouseMemberRole.MEMBER;
+
+            InvoiceStatusDto invoiceStatus = paymentGrpcClient.getInvoiceStatus(house.getId(), userId);
+
+            AccessStatus status;
+            String reason = null;
+
+            if (!invoiceStatus.depositPaid()) {
+                status = AccessStatus.PENDING_DEPOSIT;
+                reason = "ACCESS_PENDING_DEPOSIT";
+            } else if (isPendingNext && house.getNextHandoverDate() != null
+                    && now.isBefore(house.getNextHandoverDate())) {
+                status = AccessStatus.PENDING_HANDOVER;
+                reason = "ACCESS_PENDING_HANDOVER";
+            } else if (house.getHandoverDate() != null && now.isBefore(house.getHandoverDate())) {
+                status = AccessStatus.PENDING_HANDOVER;
+                reason = "ACCESS_PENDING_HANDOVER";
+            } else if (!invoiceStatus.firstRentPaid()) {
+                status = AccessStatus.PENDING_FIRST_RENT;
+                reason = "ACCESS_PENDING_FIRST_RENT";
+            } else {
+                status = AccessStatus.ACCESSIBLE;
+            }
+
+            return new HouseAccessStatus(
+                    house.getId(),
+                    house.getName(),
+                    house.getAddress(),
+                    isPendingNext ? house.getNextHandoverDate() : house.getHandoverDate(),
+                    status,
+                    reason,
+                    invoiceStatus.pendingInvoiceId() != null,
+                    invoiceStatus.pendingInvoiceId(),
+                    role
+            );
+        }).toList();
+    }
+
+    private void createPendingTenantGroup(UUID userId, UUID houseId) {
         TenantGroup group = tenantGroupRepository.findByHouseId(houseId)
+                .filter(g -> !g.isActive())
                 .orElseGet(() -> tenantGroupRepository.save(TenantGroup.builder()
                         .houseId(houseId)
+                        .isActive(false)
+                        .build()));
+
+        TenantMemberId memberId = new TenantMemberId();
+        memberId.setTenantId(group.getId());
+        memberId.setUserId(userId);
+
+        if (!tenantMemberRepository.existsById(memberId)) {
+            tenantMemberRepository.save(TenantMember.builder()
+                    .id(memberId)
+                    .tenantGroup(group)
+                    .isOwner(true)
+                    .isActive(false)
+                    .build());
+        }
+
+        log.info("[House] Pending TenantGroup created for userId={} houseId={}", userId, houseId);
+    }
+
+    private void activateNow(House house, UUID userId, Instant handoverDate) {
+        if (house.getTenantGroupId() != null) {
+            tenantGroupRepository.findById(house.getTenantGroupId()).ifPresent(g -> {
+                g.setActive(false);
+                tenantGroupRepository.save(g);
+            });
+        }
+
+        TenantGroup group = tenantGroupRepository.findByHouseIdAndIsActiveTrue(house.getId())
+                .filter(g -> tenantMemberRepository.existsByTenantGroupIdAndUserId(g.getId(), userId))
+                .orElseGet(() -> tenantGroupRepository.save(TenantGroup.builder()
+                        .houseId(house.getId())
                         .isActive(true)
                         .build()));
 
@@ -181,53 +300,15 @@ public class HouseServiceImpl implements HouseService {
         house.setUserRentalId(userId);
         house.setTenantGroupId(group.getId());
         house.setHandoverDate(handoverDate);
+        house.setNextTenantId(null);
+        house.setNextHandoverDate(null);
         house.setStatus(HouseStatus.RENTED);
         houseRepository.save(house);
 
-        log.info("[House] Activated houseId={} ownerId={}", houseId, userId);
+        log.info("[House] Activated houseId={} ownerId={}", house.getId(), userId);
     }
 
-    @Override
-    @Transactional(readOnly = true)
-    public List<HouseAccessStatus> getMyHouseAccess(UUID userId) {
-        List<House> houses = houseRepository.findByTenantGroupMemberUserId(userId);
-
-        return houses.stream().map(house -> {
-            Instant now = Instant.now();
-
-            HouseMemberRole role = userId.equals(house.getUserRentalId())
-                    ? HouseMemberRole.OWNER
-                    : HouseMemberRole.MEMBER;
-
-            InvoiceStatusDto invoiceStatus = paymentGrpcClient.getInvoiceStatus(house.getId(), userId);
-
-            AccessStatus status;
-            String reason = null;
-
-            if (!invoiceStatus.depositPaid()) {
-                status = AccessStatus.PENDING_DEPOSIT;
-                reason = "ACCESS_PENDING_DEPOSIT";
-            } else if (house.getHandoverDate() != null && now.isBefore(house.getHandoverDate())) {
-                status = AccessStatus.PENDING_HANDOVER;
-                reason = "ACCESS_PENDING_HANDOVER";
-            } else if (!invoiceStatus.firstRentPaid()) {
-                status = AccessStatus.PENDING_FIRST_RENT;
-                reason = "ACCESS_PENDING_FIRST_RENT";
-            } else {
-                status = AccessStatus.ACCESSIBLE;
-            }
-
-            return new HouseAccessStatus(
-                    house.getId(),
-                    house.getName(),
-                    house.getAddress(),
-                    house.getHandoverDate(),
-                    status,
-                    reason,
-                    invoiceStatus.pendingInvoiceId() != null,
-                    invoiceStatus.pendingInvoiceId(),
-                    role
-            );
-        }).toList();
+    private Duration contractEndBuffer() {
+        return Duration.ofDays(1);
     }
 }

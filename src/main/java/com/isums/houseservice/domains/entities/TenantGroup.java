@@ -10,7 +10,7 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "tenant_groups",
-        indexes = @Index(name = "idx_tenant_group_house", columnList = "house_id", unique = true))
+        indexes = @Index(name = "idx_tenant_group_house", columnList = "house_id"))
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -22,7 +22,7 @@ public class TenantGroup {
     @UuidGenerator
     private UUID id;
 
-    @Column(name = "house_id", nullable = false, unique = true)
+    @Column(name = "house_id", nullable = false)
     private UUID houseId;
 
     @Column(name = "is_active")

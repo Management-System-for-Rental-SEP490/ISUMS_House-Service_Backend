@@ -50,6 +50,12 @@ public class House {
     @Enumerated(EnumType.STRING)
     private HouseStatus status;
 
+    @Column(name = "next_tenant_id")
+    private UUID nextTenantId;
+
+    @Column(name = "next_handover_date")
+    private Instant nextHandoverDate;
+
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     @OneToMany(mappedBy = "house", cascade = CascadeType.ALL, orphanRemoval = true)
@@ -65,6 +71,8 @@ public class House {
     private Instant updatedAt;
 
     @OneToMany(mappedBy = "house")
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     private List<InstalledDevice> devices = new ArrayList<>();
 
     @ManyToOne

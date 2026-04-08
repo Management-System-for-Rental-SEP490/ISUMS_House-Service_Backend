@@ -21,6 +21,6 @@ public interface HouseService {
     List<HouseImageDto> getHouseImages(UUID houseId);
     void deleteHouseImage(UUID houseId, UUID imageId);
     void activeHouseForUser(UUID userId, UUID houseId, Instant handoverDate);
-
-    List<HouseAccessStatus> getMyHouseAccess(UUID tenantId);
+    List<HouseDto> getHousesByRegionId(UUID regionId);
+    List<HouseAccessStatus> getMyHouseAccess(String keycloakId);
 }

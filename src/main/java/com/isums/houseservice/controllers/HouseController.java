@@ -84,9 +84,16 @@ public class HouseController {
                     """
     )
     public ApiResponse<List<HouseAccessStatus>> myAccess(@AuthenticationPrincipal Jwt jwt) {
-        UUID tenantId = UUID.fromString(jwt.getSubject());
-        List<HouseAccessStatus> statuses = houseService.getMyHouseAccess(tenantId);
+        String keycloakId = jwt.getSubject();
+        List<HouseAccessStatus> statuses = houseService.getMyHouseAccess(keycloakId);
 
         return ApiResponses.ok(statuses, "Success");
     }
+
+    @GetMapping("/region/{regionId}")
+    public ApiResponse<List<HouseDto>> getHousesByRegionId(@PathVariable UUID regionId) {
+        List<HouseDto> res = houseService.getHousesByRegionId(regionId);
+        return ApiResponses.ok(res, "Success");
+    }
+
 }

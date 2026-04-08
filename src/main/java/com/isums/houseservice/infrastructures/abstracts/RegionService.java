@@ -8,8 +8,11 @@ import java.util.List;
 import java.util.UUID;
 
 public interface RegionService {
-    RegionDto createRegion(CreateRegionRequest request);
+    RegionDto createRegion(String managerId, CreateRegionRequest request);
     List<RegionDto> getAllRegions();
     RegionDto getById(UUID id);
     RegionDto updateRegion(UUID id, UpdateRegionRequest request);
+    RegionDto addStaffToRegion(UUID regionId, UUID staffId);
+    RegionDto removeStaffFromRegion(UUID regionId, UUID staffId);
+    List<RegionDto> getRegionByStaffId(UUID staffId);
 }
