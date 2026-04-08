@@ -14,13 +14,24 @@ import java.util.UUID;
 
 public interface HouseService {
     HouseDto CreateHouse(CreateHouseRequest req);
+
     List<HouseDto> GetAllHouses();
+
     HouseDto getHouseById(UUID id);
+
     List<HouseDto> getHouseByUserId(String userId);
+
     void uploadHouseImages(UUID houseId, List<MultipartFile> file);
+
     List<HouseImageDto> getHouseImages(UUID houseId);
+
     void deleteHouseImage(UUID houseId, UUID imageId);
+
     void activeHouseForUser(UUID userId, UUID houseId, Instant handoverDate);
+
     List<HouseDto> getHousesByRegionId(UUID regionId);
+
     List<HouseAccessStatus> getMyHouseAccess(String keycloakId);
+
+    void deactivateHouseForUser(UUID tenantId, UUID houseId);
 }
