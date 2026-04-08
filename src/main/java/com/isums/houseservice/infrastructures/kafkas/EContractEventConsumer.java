@@ -1,5 +1,6 @@
 package com.isums.houseservice.infrastructures.kafkas;
 
+import com.isums.houseservice.domains.events.ContractTerminatedEvent;
 import com.isums.houseservice.domains.events.MapUserToHouseEvent;
 import com.isums.houseservice.infrastructures.abstracts.HouseService;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +31,23 @@ public class EContractEventConsumer {
             ack.acknowledge();
         } catch (Exception e) {
             log.error("[KAFKA] handleMapUserToHouse failed: {}", e.getMessage(), e);
+            throw new RuntimeException(e);
+        }
+    }
+
+    @KafkaListener(topics = "contract.terminated", groupId = "house-group")
+    public void handleContractTerminated(
+            ConsumerRecord<String, String> record, Acknowledgment ack) {
+        try {
+            ContractTerminatedEvent event = objectMapper.readValue(record.value(), ContractTerminatedEvent.class);
+
+            houseService.deactivateHouseForUser(event.getTenantId(), event.getHouseId());
+
+            ack.acknowledge();
+            log.info("[KAFKA] Contract terminated houseId={} tenantId={}",
+                    event.getHouseId(), event.getTenantId());
+        } catch (Exception e) {
+            log.error("[KAFKA] handleContractTerminated failed: {}", e.getMessage(), e);
             throw new RuntimeException(e);
         }
     }

@@ -245,6 +245,28 @@ public class HouseServiceImpl implements HouseService {
         }).toList();
     }
 
+    @Override
+    @Transactional
+    public void deactivateHouseForUser(UUID tenantId, UUID houseId) {
+        House house = houseRepository.findById(houseId)
+                .orElseThrow(() -> new NotFoundException("House not found: " + houseId));
+
+        if (!tenantId.equals(house.getUserRentalId())) {
+            log.warn("[House] deactivateHouseForUser tenantId={} không khớp userRentalId={} houseId={}",
+                    tenantId, house.getUserRentalId(), houseId);
+            return;
+        }
+
+        house.setUserRentalId(null);
+        house.setTenantGroupId(null);
+        house.setHandoverDate(null);
+        house.setStatus(HouseStatus.AVAILABLE);
+        house.setUpdatedAt(Instant.now());
+        houseRepository.save(house);
+
+        log.info("[House] Deactivated houseId={} tenantId={}", houseId, tenantId);
+    }
+
     private void createPendingTenantGroup(UUID userId, UUID houseId) {
         TenantGroup group = tenantGroupRepository.findByHouseId(houseId)
                 .filter(g -> !g.isActive())
