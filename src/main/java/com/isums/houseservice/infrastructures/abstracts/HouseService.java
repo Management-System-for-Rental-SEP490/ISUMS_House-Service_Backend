@@ -6,6 +6,8 @@ import com.isums.houseservice.domains.dtos.HouseDto;
 import com.isums.houseservice.domains.dtos.HouseImageDto;
 import com.isums.houseservice.domains.entities.House;
 import com.isums.houseservice.domains.entities.HouseImage;
+import common.paginations.dtos.PageRequest;
+import common.paginations.dtos.PageResponse;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Instant;
@@ -15,7 +17,7 @@ import java.util.UUID;
 public interface HouseService {
     HouseDto CreateHouse(CreateHouseRequest req);
 
-    List<HouseDto> GetAllHouses();
+    PageResponse<HouseDto> getAll(PageRequest request);
 
     HouseDto getHouseById(UUID id);
 

@@ -5,8 +5,12 @@ import com.isums.houseservice.infrastructures.abstracts.HouseService;
 import com.isums.houseservice.domains.entities.House;
 import com.isums.houseservice.infrastructures.grpcs.UserClientsGrpc;
 import com.isums.userservice.grpc.UserResponse;
+import common.paginations.dtos.PageRequestParams;
+import common.paginations.dtos.PageResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -25,8 +29,8 @@ public class HouseController {
     private final UserClientsGrpc userClientsGrpc;
 
     @GetMapping
-    public ApiResponse<List<HouseDto>> GetAllHouses() {
-        List<HouseDto> res = houseService.GetAllHouses();
+    public ApiResponse<PageResponse<HouseDto>> GetAllHouses(@ParameterObject @Valid @ModelAttribute PageRequestParams params) {
+        var res = houseService.getAll(params.toPageRequest());
         return ApiResponses.ok(res, "Success to get all houses");
     }
 

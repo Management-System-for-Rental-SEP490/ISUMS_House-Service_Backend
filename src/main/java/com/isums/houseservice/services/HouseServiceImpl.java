@@ -13,13 +13,20 @@ import com.isums.houseservice.infrastructures.kafkas.HouseEventProducer;
 import com.isums.houseservice.infrastructures.mappers.HouseMapper;
 import com.isums.houseservice.infrastructures.repositories.*;
 import com.isums.userservice.grpc.UserResponse;
+import common.paginations.cache.CachedPageService;
+import common.paginations.converters.SpringPageConverter;
+import common.paginations.dtos.PageRequest;
+import common.paginations.dtos.PageResponse;
+import common.paginations.specifications.SpecificationBuilder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import tools.jackson.core.type.TypeReference;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -44,6 +51,9 @@ public class HouseServiceImpl implements HouseService {
     private final PaymentGrpcClient paymentGrpcClient;
     private final TenantGroupRepository tenantGroupRepository;
     private final TenantMemberRepository tenantMemberRepository;
+    private final CachedPageService cachedPageService;
+
+    private static final String PAGE_NS = "houses";
 
     private static final DateTimeFormatter DMY = DateTimeFormatter
             .ofPattern("dd/MM/yyyy")
@@ -71,16 +81,12 @@ public class HouseServiceImpl implements HouseService {
     }
 
     @Override
-    @Cacheable(value = "allHouses")
     @Transactional(readOnly = true)
-    public List<HouseDto> GetAllHouses() {
-        try {
-
-            List<House> houses = houseRepository.findAll();
-            return houseMapper.toDtos(houses);
-        } catch (Exception ex) {
-            throw new RuntimeException("Error to get all houses");
-        }
+    public PageResponse<HouseDto> getAll(PageRequest request) {
+        return cachedPageService.getOrLoad(PAGE_NS, request, new TypeReference<>() {
+                },
+                () -> loadPage(request)
+        );
     }
 
     @Override
@@ -328,6 +334,36 @@ public class HouseServiceImpl implements HouseService {
         houseRepository.save(house);
 
         log.info("[House] Activated houseId={} ownerId={}", house.getId(), userId);
+    }
+
+    private PageResponse<HouseDto> loadPage(PageRequest request) {
+        HouseStatus statusFilter = request.<String>filterValue("status")
+                .map(s -> {
+                    try {
+                        return HouseStatus.valueOf(s.toUpperCase().trim());
+                    } catch (IllegalArgumentException e) {
+                        return null;
+                    }
+                })
+                .orElse(null);
+
+        String statusesRaw = request.<String>filterValue("statuses").orElse(null);
+
+        String houseIdRaw = request.<String>filterValue("houseId").orElse(null);
+        UUID houseIdFilter = houseIdRaw != null ? UUID.fromString(houseIdRaw) : null;
+
+        var spec = SpecificationBuilder.<House>create()
+                .keywordLike(request.keyword(), "name", "address")
+                .enumEq("status", statusFilter)
+                .enumInRaw("status", statusesRaw, HouseStatus.class)
+                .eq("houseId", houseIdFilter)
+                .build();
+
+        var pageable = SpringPageConverter.toPageable(request);
+
+        Page<House> page = houseRepository.findAll(spec, pageable);
+
+        return SpringPageConverter.fromPage(page, houseMapper::toDto);
     }
 
     private Duration contractEndBuffer() {
