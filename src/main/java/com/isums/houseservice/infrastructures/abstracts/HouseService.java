@@ -36,4 +36,6 @@ public interface HouseService {
     List<HouseAccessStatus> getMyHouseAccess(String keycloakId);
 
     void deactivateHouseForUser(UUID tenantId, UUID houseId);
+
+    void setTenantAccessRestriction(UUID tenantId, UUID houseId, boolean restricted);
 }
