@@ -44,6 +44,9 @@ public class House {
     @Column(columnDefinition = "text")
     private String description;
 
+    @Column(name = "payment_restricted")
+    private Boolean paymentRestricted = false;
+
     @Column(name = "handover_date")
     private Instant handoverDate;
 

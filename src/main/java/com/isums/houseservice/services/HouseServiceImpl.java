@@ -233,6 +233,9 @@ public class HouseServiceImpl implements HouseService {
             } else if (!invoiceStatus.firstRentPaid()) {
                 status = AccessStatus.PENDING_FIRST_RENT;
                 reason = "ACCESS_PENDING_FIRST_RENT";
+            } else if (Boolean.TRUE.equals(house.getPaymentRestricted())) {
+                status = AccessStatus.PAYMENT_RESTRICTED;
+                reason = "PAYMENT_OVERDUE";
             } else {
                 status = AccessStatus.ACCESSIBLE;
             }
@@ -271,6 +274,26 @@ public class HouseServiceImpl implements HouseService {
         houseRepository.save(house);
 
         log.info("[House] Deactivated houseId={} tenantId={}", houseId, tenantId);
+    }
+
+    @Override
+    @Transactional
+    public void setTenantAccessRestriction(UUID tenantId, UUID houseId, boolean restricted) {
+        House house = houseRepository.findById(houseId)
+                .orElseThrow(() -> new NotFoundException("House not found: " + houseId));
+
+        if (!tenantId.equals(house.getUserRentalId())) {
+            log.warn("[House] setTenantAccessRestriction tenantId={} không phải tenant của houseId={}",
+                    tenantId, houseId);
+            return;
+        }
+
+        house.setPaymentRestricted(restricted);
+        house.setUpdatedAt(Instant.now());
+        houseRepository.save(house);
+
+        log.info("[House] PaymentRestricted={} houseId={} tenantId={}",
+                restricted, houseId, tenantId);
     }
 
     private void createPendingTenantGroup(UUID userId, UUID houseId) {
