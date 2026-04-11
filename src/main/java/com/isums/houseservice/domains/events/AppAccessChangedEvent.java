@@ -1,4 +1,4 @@
-package com.isums.houseservice.domains.dtos;
+package com.isums.houseservice.domains.events;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
