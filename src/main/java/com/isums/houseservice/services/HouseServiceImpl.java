@@ -34,7 +34,9 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -137,9 +139,7 @@ public class HouseServiceImpl implements HouseService {
         });
     }
 
-    @Override
-    @Cacheable(value = "houseImages", key = "#houseId")
-    public List<HouseImageDto> getHouseImages(UUID houseId) {
+    private List<HouseImageDto> getHouseImages(UUID houseId) {
         List<HouseImage> images = houseImageRepository.findByHouseId(houseId);
 
         List<HouseImageDto> imagesDto = new ArrayList<>();
@@ -386,7 +386,38 @@ public class HouseServiceImpl implements HouseService {
 
         Page<House> page = houseRepository.findAll(spec, pageable);
 
-        return SpringPageConverter.fromPage(page, houseMapper::toDto);
+        List<House> houses = page.getContent();
+
+        List<HouseDto> housedtos = houses.stream()
+                .map(house -> {
+                    HouseDto dto = houseMapper.toDto(house);
+
+                    List<HouseImageDto> images = getHouseImages(house.getId());
+
+                    return new HouseDto(
+                            dto.id(),
+                            dto.userRentalId(),
+                            dto.regionId(),
+                            dto.name(),
+                            dto.address(),
+                            dto.ward(),
+                            dto.commune(),
+                            dto.city(),
+                            dto.description(),
+                            dto.status(),
+                            dto.functionalAreas(),
+                            images
+                    );
+                })
+                .toList();
+        return PageResponse.of(
+                housedtos,
+                page.hasNext(),
+                page.getTotalElements(),
+                page.getTotalPages(),
+                page.getNumber(),
+                page.getSize()
+        );
     }
 
     private Duration contractEndBuffer() {

@@ -58,11 +58,11 @@ public class HouseController {
         return ApiResponses.ok(null, "Upload images successfully");
     }
 
-    @GetMapping("{houseId}/images")
-    public ApiResponse<List<HouseImageDto>> getHouseImages(@PathVariable UUID houseId) {
-        List<HouseImageDto> images = houseService.getHouseImages(houseId);
-        return ApiResponses.ok(images, "Get images successfully");
-    }
+//    @GetMapping("{houseId}/images")
+//    public ApiResponse<List<HouseImageDto>> getHouseImages(@PathVariable UUID houseId) {
+//        List<HouseImageDto> images = houseService.getHouseImages(houseId);
+//        return ApiResponses.ok(images, "Get images successfully");
+//    }
 
     @DeleteMapping("{houseId}/image/{imageId}")
     public ApiResponse<Void> deleteHouseImage(@PathVariable UUID houseId, @PathVariable UUID imageId) {
