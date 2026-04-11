@@ -17,5 +17,8 @@ public record HouseDto(UUID id,
                        Boolean paymentRestricted,
                        String description,
                        HouseStatus status,
-                       List<FunctionalAreaDto> functionalAreas) {
+                       List<FunctionalAreaDto> functionalAreas,
+                       List<HouseImageDto> images)
+
+{
 }
