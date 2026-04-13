@@ -92,14 +92,28 @@ public class HouseServiceImpl implements HouseService {
     }
 
     @Override
-    @Cacheable(value = "houseInformation", key = "#id")
     @Transactional(readOnly = true)
     public HouseDto getHouseById(UUID id) {
         try {
             House house = houseRepository.findWithFunctionalAreasById(id)
                     .orElseThrow(() -> new RuntimeException("House not found"));
 
-            return houseMapper.toDto(house);
+            HouseDto dto = houseMapper.toDto(house);
+            return new HouseDto(
+                    dto.id(),
+                    dto.userRentalId(),
+                    dto.regionId(),
+                    dto.name(),
+                    dto.address(),
+                    dto.ward(),
+                    dto.commune(),
+                    dto.paymentRestricted(),
+                    dto.city(),
+                    dto.description(),
+                    dto.status(),
+                    dto.functionalAreas(),
+                    getHouseImages(id)
+            );
         } catch (Exception ex) {
             throw new RuntimeException("Fail to get house by id: " + ex.getMessage());
         }
@@ -402,6 +416,7 @@ public class HouseServiceImpl implements HouseService {
                             dto.address(),
                             dto.ward(),
                             dto.commune(),
+                            dto.paymentRestricted(),
                             dto.city(),
                             dto.paymentRestricted(),
                             dto.description(),
