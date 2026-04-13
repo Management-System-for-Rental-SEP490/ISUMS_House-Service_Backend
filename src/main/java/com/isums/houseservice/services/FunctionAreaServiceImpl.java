@@ -8,6 +8,7 @@ import com.isums.houseservice.domains.emuns.FuctionalAreaStatus;
 import com.isums.houseservice.domains.entities.FunctionalArea;
 import com.isums.houseservice.domains.entities.House;
 import com.isums.houseservice.domains.mapper.FunctionalAreaMapper;
+import com.isums.houseservice.exceptions.NotFoundException;
 import com.isums.houseservice.infrastructures.repositories.FunctionalAreaRepository;
 import com.isums.houseservice.infrastructures.repositories.HouseRepository;
 import lombok.RequiredArgsConstructor;
@@ -26,87 +27,68 @@ public class FunctionAreaServiceImpl implements FunctionalAreaService {
     private final FunctionalAreaRepository functionalAreaRepository;
 
     @Override
+    @Transactional
     public FunctionalAreaDto createArea(CreateFunctionalAreaRequest request) {
-        try{
-            House house = houseRepository.findById(request.house())
-                    .orElseThrow(() -> new RuntimeException("Id not found"));
+        House house = houseRepository.findById(request.house())
+                .orElseThrow(() -> new NotFoundException("House not found: " + request.house()));
 
-            FunctionalArea functionalArea =FunctionalArea.builder()
-                    .house(house)
-                    .name(request.name())
-                    .areaType(request.areaType())
-                    .floorNo(request.floorNo())
-                    .description(request.description())
-                    .status(FuctionalAreaStatus.NORMAL)
-                    .createdAt(Instant.now())
-                    .build();
+        FunctionalArea functionalArea = FunctionalArea.builder()
+                .house(house)
+                .name(request.name())
+                .areaType(request.areaType())
+                .floorNo(request.floorNo())
+                .description(request.description())
+                .status(FuctionalAreaStatus.NORMAL)
+                .createdAt(Instant.now())
+                .build();
 
-            FunctionalArea created = functionalAreaRepository.save(functionalArea);
+        FunctionalArea created = functionalAreaRepository.save(functionalArea);
 
-            return functionalAreaMapper.mapFunc(created);
-
-        } catch (Exception ex) {
-            throw new RuntimeException("Error to get asset item: " + ex.getMessage());        }
-        }
+        return functionalAreaMapper.mapFunc(created);
+    }
 
     @Override
     @Transactional(readOnly = true)
     public List<FunctionalAreaDto> getAllAreas(UUID houseId) {
-        try{
-            List<FunctionalArea> mapAreas = functionalAreaRepository.findByHouseId(houseId);
-            return functionalAreaMapper.mapFuncs(mapAreas);
-        } catch (Exception ex) {
-            throw new RuntimeException("Error to get asset item: " + ex.getMessage());
-        }
+        List<FunctionalArea> areas = functionalAreaRepository.findByHouseId(houseId);
+        return functionalAreaMapper.mapFuncs(areas);
     }
 
     @Override
-    public FunctionalAreaDto updateArea(UUID id , UpdateFunctionalAreaRequest request) {
-        try{
-            FunctionalArea area = functionalAreaRepository.findById(id)
-                    .orElseThrow(() -> new RuntimeException("Id not found"));
+    @Transactional
+    public FunctionalAreaDto updateArea(UUID id, UpdateFunctionalAreaRequest request) {
+        FunctionalArea area = functionalAreaRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Functional area not found: " + id));
 
-            if(request.name() != null){
-                area.setName(request.name());
-            }
-            if(request.areaType() != null){
-                area.setAreaType(request.areaType());
-            }
-            if(request.floorNo() != null){
-                area.setFloorNo(request.floorNo());
-            }
-            if(request.description() != null){
-                area.setDescription(request.description());
-            }
-            if(request.status() != null){
-                area.setStatus(request.status());
-            }
-
-            FunctionalArea update = functionalAreaRepository.save(area);
-            return functionalAreaMapper.mapFunc(update);
-
-        } catch (Exception ex) {
-            throw new RuntimeException("Error to get asset item: " + ex.getMessage());
+        if (request.name() != null) {
+            area.setName(request.name());
+        }
+        if (request.areaType() != null) {
+            area.setAreaType(request.areaType());
+        }
+        if (request.floorNo() != null) {
+            area.setFloorNo(request.floorNo());
+        }
+        if (request.description() != null) {
+            area.setDescription(request.description());
+        }
+        if (request.status() != null) {
+            area.setStatus(request.status());
         }
 
-
+        FunctionalArea updated = functionalAreaRepository.save(area);
+        return functionalAreaMapper.mapFunc(updated);
     }
 
     @Override
+    @Transactional
     public Boolean deleteArea(UUID id) {
-        try{
-            FunctionalArea area = functionalAreaRepository.findById(id)
-                    .orElseThrow(() -> new RuntimeException("Id not found"));
+        FunctionalArea area = functionalAreaRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Functional area not found: " + id));
 
-            area.setStatus(FuctionalAreaStatus.UNAVAILABLE);
-            functionalAreaRepository.save(area);
+        area.setStatus(FuctionalAreaStatus.UNAVAILABLE);
+        functionalAreaRepository.save(area);
 
-            return true;
-        } catch (Exception ex) {
-            throw new RuntimeException("Error to get asset item: " + ex.getMessage());
-        }
+        return true;
     }
 }
-
-
-

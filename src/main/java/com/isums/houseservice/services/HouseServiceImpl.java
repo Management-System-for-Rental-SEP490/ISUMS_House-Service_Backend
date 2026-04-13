@@ -403,6 +403,7 @@ public class HouseServiceImpl implements HouseService {
                             dto.ward(),
                             dto.commune(),
                             dto.city(),
+                            dto.paymentRestricted(),
                             dto.description(),
                             dto.status(),
                             dto.functionalAreas(),

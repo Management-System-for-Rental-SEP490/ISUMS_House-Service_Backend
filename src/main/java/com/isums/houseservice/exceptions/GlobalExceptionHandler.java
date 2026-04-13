@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -87,6 +88,21 @@ public class GlobalExceptionHandler {
                         .build())
         );
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(res);
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ApiResponse<Void>> handleResponseStatus(ResponseStatusException ex) {
+        HttpStatus status = HttpStatus.resolve(ex.getStatusCode().value());
+        if (status == null) status = HttpStatus.INTERNAL_SERVER_ERROR;
+        ApiResponse<Void> res = ApiResponses.fail(
+                status,
+                ex.getReason() != null ? ex.getReason() : status.getReasonPhrase(),
+                List.of(ApiError.builder()
+                        .code(status.name())
+                        .message(ex.getReason() != null ? ex.getReason() : status.getReasonPhrase())
+                        .build())
+        );
+        return ResponseEntity.status(status).body(res);
     }
 
     @ExceptionHandler(HouseException.class)
