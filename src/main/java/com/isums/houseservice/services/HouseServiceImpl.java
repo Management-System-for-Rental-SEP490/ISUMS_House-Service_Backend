@@ -418,6 +418,7 @@ public class HouseServiceImpl implements HouseService {
                             dto.commune(),
                             dto.paymentRestricted(),
                             dto.city(),
+                            dto.paymentRestricted(),
                             dto.description(),
                             dto.status(),
                             dto.functionalAreas(),
