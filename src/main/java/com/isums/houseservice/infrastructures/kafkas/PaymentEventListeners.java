@@ -19,11 +19,12 @@ public class PaymentEventListeners {
     private final ObjectMapper objectMapper;
 
     @KafkaListener(topics = "payment.app-access-changed", groupId = "house-group")
-    public void handleAppAccessChanged(
-            ConsumerRecord<String, String> record, Acknowledgment ack) {
+    public void handleAppAccessChanged(ConsumerRecord<String, String> record, Acknowledgment ack) {
         try {
             AppAccessChangedEvent event = objectMapper.readValue(
                     record.value(), AppAccessChangedEvent.class);
+
+            log.info("[House] AppAccess event={}", event);
 
             houseService.setTenantAccessRestriction(
                     event.getTenantId(),

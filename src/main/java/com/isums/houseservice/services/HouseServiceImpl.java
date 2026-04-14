@@ -73,6 +73,7 @@ public class HouseServiceImpl implements HouseService {
                 .commune(req.commune())
                 .city(req.city())
                 .description(req.description())
+                .numberOfFloors(req.numberOfFloors())
                 .status(HouseStatus.AVAILABLE)
                 .createdAt(Instant.now())
                 .updatedAt(Instant.now())
@@ -107,8 +108,9 @@ public class HouseServiceImpl implements HouseService {
                     dto.address(),
                     dto.ward(),
                     dto.commune(),
-                    dto.paymentRestricted(),
                     dto.city(),
+                    dto.numberOfFloors(),
+                    dto.paymentRestricted(),
                     dto.description(),
                     dto.status(),
                     dto.functionalAreas(),
@@ -254,19 +256,24 @@ public class HouseServiceImpl implements HouseService {
                 status = AccessStatus.ACCESSIBLE;
             }
 
-            return new HouseAccessStatus(
-                    house.getId(),
-                    house.getName(),
-                    house.getAddress(),
-                    isPendingNext ? house.getNextHandoverDate() : house.getHandoverDate(),
-                    status,
-                    reason,
-                    invoiceStatus.pendingInvoiceId() != null,
-                    invoiceStatus.pendingInvoiceId(),
-                    role
-            );
-        }).toList();
-    }
+            if (Boolean.TRUE.equals(house.getPaymentRestricted())) {
+                status = AccessStatus.PAYMENT_RESTRICTED;
+                reason = "PAYMENT_RESTRICTED";
+            }
+
+                return new HouseAccessStatus(
+                        house.getId(),
+                        house.getName(),
+                        house.getAddress(),
+                        isPendingNext ? house.getNextHandoverDate() : house.getHandoverDate(),
+                        status,
+                        reason,
+                        invoiceStatus.pendingInvoiceId() != null,
+                        invoiceStatus.pendingInvoiceId(),
+                        role
+                );
+            }).toList();
+        }
 
     @Override
     @Transactional
@@ -408,34 +415,33 @@ public class HouseServiceImpl implements HouseService {
 
                     List<HouseImageDto> images = getHouseImages(house.getId());
 
-                    return new HouseDto(
-                            dto.id(),
-                            dto.userRentalId(),
-                            dto.regionId(),
-                            dto.name(),
-                            dto.address(),
-                            dto.ward(),
-                            dto.commune(),
-                            dto.paymentRestricted(),
-                            dto.city(),
-                            dto.paymentRestricted(),
-                            dto.description(),
-                            dto.status(),
-                            dto.functionalAreas(),
-                            images
-                    );
-                })
-                .toList();
-        return PageResponse.of(
-                housedtos,
-                page.hasNext(),
-                page.getTotalElements(),
-                page.getTotalPages(),
-                page.getNumber(),
-                page.getSize()
-        );
-    }
-
+                        return new HouseDto(
+                                dto.id(),
+                                dto.userRentalId(),
+                                dto.regionId(),
+                                dto.name(),
+                                dto.address(),
+                                dto.ward(),
+                                dto.commune(),
+                                dto.city(),
+                                dto.numberOfFloors(),
+                                dto.paymentRestricted(),
+                                dto.description(),
+                                dto.status(),
+                                dto.functionalAreas(),
+                                images
+                        );
+                    })
+                    .toList();
+            return PageResponse.of(
+                    housedtos,
+                    page.hasNext(),
+                    page.getTotalElements(),
+                    page.getTotalPages(),
+                    page.getNumber(),
+                    page.getSize()
+            );
+        }
     private Duration contractEndBuffer() {
         return Duration.ofDays(1);
     }

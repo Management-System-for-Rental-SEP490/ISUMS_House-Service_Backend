@@ -13,6 +13,7 @@ public record CreateHouseRequest(
     String commune,
     String city,
     String description,
+    Integer numberOfFloors,
     List<String> houseImages
 ) {
 }

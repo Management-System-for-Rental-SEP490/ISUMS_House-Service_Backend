@@ -103,7 +103,7 @@ class HouseServiceImplTest {
                 houseId, null, regionId,
                 "Test House", "123 Street",
                 null, "Test Commune", "Test City",
-                false, "Desc",
+                null, false, "Desc",
                 HouseStatus.AVAILABLE, List.of(), List.of()
         );
     }
@@ -122,7 +122,7 @@ class HouseServiceImplTest {
         void setUp() {
             req = new CreateHouseRequest(
                     "Test House", "123 Street", regionId,
-                    null, "Test Commune", "Test City", "Desc", List.of()
+                    null, "Test Commune", "Test City", "Desc", null, List.of()
             );
         }
 

@@ -44,6 +44,9 @@ public class House {
     @Column(columnDefinition = "text")
     private String description;
 
+    @Column(name = "number_of_floors")
+    private Integer numberOfFloors;
+
     @Column(name = "payment_restricted")
     private Boolean paymentRestricted = false;
 

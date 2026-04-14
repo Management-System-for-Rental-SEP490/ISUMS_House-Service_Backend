@@ -80,7 +80,7 @@ class HouseControllerTest {
 
     private HouseDto houseDto(UUID id) {
         return new HouseDto(id, UUID.randomUUID(), UUID.randomUUID(), "H1",
-                "addr", "ward", "commune", "city", false, "desc",
+                "addr", "ward", "commune", "city", 1, false, "desc",
                 HouseStatus.AVAILABLE, List.of(), List.of());
     }
 
@@ -101,7 +101,7 @@ class HouseControllerTest {
     @DisplayName("POST / creates house and returns 200 (body statusCode=201)")
     void create() throws Exception {
         CreateHouseRequest req = new CreateHouseRequest(
-                "H1","addr",UUID.randomUUID(),"ward","commune","city","desc", List.of());
+                "H1","addr",UUID.randomUUID(),"ward","commune","city","desc", 1, List.of());
         UUID id = UUID.randomUUID();
         when(houseService.CreateHouse(any())).thenReturn(houseDto(id));
 
