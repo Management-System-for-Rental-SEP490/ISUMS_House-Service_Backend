@@ -11,6 +11,7 @@ import com.isums.houseservice.exceptions.NotFoundException;
 import com.isums.houseservice.infrastructures.mappers.RegionMapper;
 import com.isums.houseservice.infrastructures.repositories.RegionRepository;
 import com.isums.houseservice.infrastructures.repositories.RegionStaffRepository;
+import common.i18n.TranslationMap;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -41,6 +42,7 @@ class RegionServiceImplTest {
     @Mock private RegionRepository regionRepository;
     @Mock private RegionMapper regionMapper;
     @Mock private RegionStaffRepository regionStaffRepository;
+    @Mock private TranslationAutoFillService translationAutoFillService;
 
     @InjectMocks private RegionServiceImpl service;
 
@@ -75,6 +77,10 @@ class RegionServiceImplTest {
             CreateRegionRequest req = new CreateRegionRequest(
                     "North", "North region", managerId, List.of(staffId1, staffId2, staffId1));
             RegionDto expected = dto(List.of(staffId1, staffId2));
+            when(translationAutoFillService.complete("North"))
+                    .thenReturn(TranslationMap.of(java.util.Map.of("vi", "North", "en", "North", "ja", "ノース")));
+            when(translationAutoFillService.complete("North region"))
+                    .thenReturn(TranslationMap.of(java.util.Map.of("vi", "North region", "en", "North region", "ja", "北リージョン")));
 
             when(regionMapper.toDto(any(Region.class), anyList())).thenReturn(expected);
 
@@ -92,6 +98,10 @@ class RegionServiceImplTest {
         @DisplayName("skips staff save when technicalStaffIds is null")
         void nullStaffIds() {
             CreateRegionRequest req = new CreateRegionRequest("North", "desc", managerId, null);
+            when(translationAutoFillService.complete("North"))
+                    .thenReturn(TranslationMap.of(java.util.Map.of("vi", "North", "en", "North", "ja", "ノース")));
+            when(translationAutoFillService.complete("desc"))
+                    .thenReturn(TranslationMap.of(java.util.Map.of("vi", "desc", "en", "desc", "ja", "説明")));
             when(regionMapper.toDto(any(Region.class), anyList())).thenReturn(dto(List.of()));
 
             service.createRegion(managerId.toString(), req);
@@ -103,6 +113,10 @@ class RegionServiceImplTest {
         @DisplayName("skips staff save when technicalStaffIds is empty")
         void emptyStaffIds() {
             CreateRegionRequest req = new CreateRegionRequest("N", "d", managerId, List.of());
+            when(translationAutoFillService.complete("N"))
+                    .thenReturn(TranslationMap.of(java.util.Map.of("vi", "N", "en", "N", "ja", "N")));
+            when(translationAutoFillService.complete("d"))
+                    .thenReturn(TranslationMap.of(java.util.Map.of("vi", "d", "en", "d", "ja", "d")));
             when(regionMapper.toDto(any(Region.class), anyList())).thenReturn(dto(List.of()));
 
             service.createRegion(managerId.toString(), req);
@@ -181,6 +195,8 @@ class RegionServiceImplTest {
         void partialUpdateFields() {
             UpdateRegionRequest req = new UpdateRegionRequest("Updated", null, null, null);
             when(regionRepository.findById(regionId)).thenReturn(Optional.of(region));
+            when(translationAutoFillService.complete("Updated"))
+                    .thenReturn(TranslationMap.of(java.util.Map.of("vi", "Updated", "en", "Updated", "ja", "更新")));
             when(regionStaffRepository.findStaffIdsByRegionId(regionId)).thenReturn(List.of());
             when(regionMapper.toDto(any(Region.class), anyList())).thenReturn(dto(List.of()));
 

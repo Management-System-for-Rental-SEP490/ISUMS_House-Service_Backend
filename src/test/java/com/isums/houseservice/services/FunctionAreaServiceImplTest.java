@@ -11,6 +11,7 @@ import com.isums.houseservice.domains.mapper.FunctionalAreaMapper;
 import com.isums.houseservice.exceptions.NotFoundException;
 import com.isums.houseservice.infrastructures.repositories.FunctionalAreaRepository;
 import com.isums.houseservice.infrastructures.repositories.HouseRepository;
+import common.i18n.TranslationMap;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -40,6 +41,7 @@ class FunctionAreaServiceImplTest {
     @Mock private HouseRepository houseRepository;
     @Mock private FunctionalAreaMapper functionalAreaMapper;
     @Mock private FunctionalAreaRepository functionalAreaRepository;
+    @Mock private TranslationAutoFillService translationAutoFillService;
 
     @InjectMocks private FunctionAreaServiceImpl service;
 
@@ -68,6 +70,10 @@ class FunctionAreaServiceImplTest {
         void happyPath() {
             CreateFunctionalAreaRequest req = new CreateFunctionalAreaRequest(
                     houseId, "Kitchen", AreaType.KITCHEN, "1", "desc");
+            when(translationAutoFillService.complete("Kitchen"))
+                    .thenReturn(TranslationMap.of(java.util.Map.of("vi", "Kitchen", "en", "Kitchen", "ja", "キッチン")));
+            when(translationAutoFillService.complete("desc"))
+                    .thenReturn(TranslationMap.of(java.util.Map.of("vi", "desc", "en", "desc", "ja", "説明")));
 
             when(houseRepository.findById(houseId)).thenReturn(Optional.of(house));
             when(functionalAreaRepository.save(any(FunctionalArea.class)))
@@ -145,6 +151,10 @@ class FunctionAreaServiceImplTest {
                     .description("old").status(FuctionalAreaStatus.NORMAL).build();
 
             when(functionalAreaRepository.findById(areaId)).thenReturn(Optional.of(area));
+            when(translationAutoFillService.complete("NewName"))
+                    .thenReturn(TranslationMap.of(java.util.Map.of("vi", "NewName", "en", "NewName", "ja", "ニュー")));
+            when(translationAutoFillService.complete("newDesc"))
+                    .thenReturn(TranslationMap.of(java.util.Map.of("vi", "newDesc", "en", "newDesc", "ja", "新説明")));
             when(functionalAreaRepository.save(area)).thenReturn(area);
             when(functionalAreaMapper.mapFunc(area)).thenReturn(dto());
 
@@ -165,6 +175,8 @@ class FunctionAreaServiceImplTest {
                     .floorNo("1").description("old").status(FuctionalAreaStatus.NORMAL).build();
 
             when(functionalAreaRepository.findById(areaId)).thenReturn(Optional.of(area));
+            when(translationAutoFillService.complete("NewName"))
+                    .thenReturn(TranslationMap.of(java.util.Map.of("vi", "NewName", "en", "NewName", "ja", "ニュー")));
             when(functionalAreaRepository.save(area)).thenReturn(area);
             when(functionalAreaMapper.mapFunc(area)).thenReturn(dto());
 

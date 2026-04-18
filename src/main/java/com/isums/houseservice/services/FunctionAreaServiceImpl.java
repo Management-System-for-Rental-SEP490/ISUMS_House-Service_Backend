@@ -25,6 +25,7 @@ public class FunctionAreaServiceImpl implements FunctionalAreaService {
     private final HouseRepository houseRepository;
     private final FunctionalAreaMapper functionalAreaMapper;
     private final FunctionalAreaRepository functionalAreaRepository;
+    private final TranslationAutoFillService translationAutoFillService;
 
     @Override
     @Transactional
@@ -35,9 +36,11 @@ public class FunctionAreaServiceImpl implements FunctionalAreaService {
         FunctionalArea functionalArea = FunctionalArea.builder()
                 .house(house)
                 .name(request.name())
+                .nameTranslations(translationAutoFillService.complete(request.name()))
                 .areaType(request.areaType())
                 .floorNo(request.floorNo())
                 .description(request.description())
+                .descriptionTranslations(translationAutoFillService.complete(request.description()))
                 .status(FuctionalAreaStatus.NORMAL)
                 .createdAt(Instant.now())
                 .build();
@@ -62,6 +65,7 @@ public class FunctionAreaServiceImpl implements FunctionalAreaService {
 
         if (request.name() != null) {
             area.setName(request.name());
+            area.setNameTranslations(translationAutoFillService.complete(request.name()));
         }
         if (request.areaType() != null) {
             area.setAreaType(request.areaType());
@@ -71,6 +75,7 @@ public class FunctionAreaServiceImpl implements FunctionalAreaService {
         }
         if (request.description() != null) {
             area.setDescription(request.description());
+            area.setDescriptionTranslations(translationAutoFillService.complete(request.description()));
         }
         if (request.status() != null) {
             area.setStatus(request.status());

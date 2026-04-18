@@ -15,6 +15,7 @@ import com.isums.houseservice.infrastructures.kafkas.HouseEventProducer;
 import com.isums.houseservice.infrastructures.mappers.HouseMapper;
 import com.isums.houseservice.infrastructures.repositories.*;
 import com.isums.userservice.grpc.UserResponse;
+import common.i18n.TranslationMap;
 import common.paginations.cache.CachedPageService;
 import common.paginations.dtos.PageRequest;
 import common.paginations.dtos.PageResponse;
@@ -59,6 +60,7 @@ class HouseServiceImplTest {
     @Mock private TenantGroupRepository    tenantGroupRepository;
     @Mock private TenantMemberRepository   tenantMemberRepository;
     @Mock private CachedPageService        cachedPageService;
+    @Mock private TranslationAutoFillService translationAutoFillService;
 
     @InjectMocks
     private HouseServiceImpl houseService;
@@ -90,9 +92,11 @@ class HouseServiceImplTest {
                 .id(houseId)
                 .name("Test House")
                 .address("123 Street")
+                .ward("Ward 1")
                 .commune("Test Commune")
                 .city("Test City")
                 .description("Desc")
+                .paymentRestricted(false)
                 .status(HouseStatus.AVAILABLE)
                 .region(region)
                 .createdAt(Instant.now())
@@ -102,7 +106,7 @@ class HouseServiceImplTest {
         houseDto = new HouseDto(
                 houseId, null, regionId,
                 "Test House", "123 Street",
-                null, "Test Commune", "Test City",
+                "Ward 1", "Test Commune", "Test City",
                 null, false, "Desc",
                 HouseStatus.AVAILABLE, List.of(), List.of()
         );
@@ -122,13 +126,17 @@ class HouseServiceImplTest {
         void setUp() {
             req = new CreateHouseRequest(
                     "Test House", "123 Street", regionId,
-                    null, "Test Commune", "Test City", "Desc", null, List.of()
+                    "Ward 1", "Test Commune", "Test City", "Desc", 3, List.of()
             );
         }
 
         @Test
         @DisplayName("should create house, publish event, and return dto on success")
         void createHouse_success() {
+            given(translationAutoFillService.complete("Test House"))
+                    .willReturn(TranslationMap.of(java.util.Map.of("vi", "Test House", "en", "Test House", "ja", "テストハウス")));
+            given(translationAutoFillService.complete("Desc"))
+                    .willReturn(TranslationMap.of(java.util.Map.of("vi", "Desc", "en", "Desc", "ja", "説明")));
             given(regionRepository.findById(regionId)).willReturn(Optional.of(region));
             given(houseRepository.save(any(House.class))).willReturn(house);
             given(houseMapper.toDto(house)).willReturn(houseDto);
@@ -137,12 +145,17 @@ class HouseServiceImplTest {
 
             assertThat(result).isEqualTo(houseDto);
             verify(houseRepository).save(any(House.class));
+            verify(cachedPageService).evictAll("houses");
             verify(houseEventProducer).publishHouseCreated(house.getId());
         }
 
         @Test
         @DisplayName("saved house has AVAILABLE status and correct fields")
         void createHouse_persistedEntityHasCorrectFields() {
+            given(translationAutoFillService.complete("Test House"))
+                    .willReturn(TranslationMap.of(java.util.Map.of("vi", "Test House", "en", "Test House", "ja", "テストハウス")));
+            given(translationAutoFillService.complete("Desc"))
+                    .willReturn(TranslationMap.of(java.util.Map.of("vi", "Desc", "en", "Desc", "ja", "説明")));
             given(regionRepository.findById(regionId)).willReturn(Optional.of(region));
             given(houseRepository.save(any(House.class))).willReturn(house);
             given(houseMapper.toDto(house)).willReturn(houseDto);
@@ -155,6 +168,11 @@ class HouseServiceImplTest {
             House saved = captor.getValue();
             assertThat(saved.getStatus()).isEqualTo(HouseStatus.AVAILABLE);
             assertThat(saved.getName()).isEqualTo("Test House");
+            assertThat(saved.getWard()).isEqualTo("Ward 1");
+            assertThat(saved.getNumberOfFloors()).isEqualTo(3);
+            assertThat(saved.getPaymentRestricted()).isFalse();
+            assertThat(saved.getFunctionalAreas()).isEmpty();
+            assertThat(saved.getHouseImages()).isEmpty();
             assertThat(saved.getRegion()).isEqualTo(region);
             assertThat(saved.getCreatedAt()).isNotNull();
         }
@@ -633,7 +651,7 @@ class HouseServiceImplTest {
 
             HouseAccessStatus status = result.get(0);
             assertThat(status.accessStatus()).isEqualTo(AccessStatus.PAYMENT_RESTRICTED);
-            assertThat(status.reason()).isEqualTo("PAYMENT_OVERDUE");
+            assertThat(status.reason()).isEqualTo("PAYMENT_RESTRICTED");
         }
 
         @Test

@@ -2,6 +2,7 @@ package com.isums.houseservice.infrastructures.mappers;
 
 import com.google.protobuf.Timestamp;
 import com.google.protobuf.util.Timestamps;
+import common.i18n.TranslationMap;
 import com.isums.houseservice.domains.entities.FunctionalArea;
 import com.isums.houseservice.domains.entities.House;
 import com.isums.houseservice.grpc.*;
@@ -18,11 +19,11 @@ public class HouseGrpcMapper {
         HouseResponse.Builder builder = HouseResponse.newBuilder()
                 .setId(uuidToString(house.getId()))
                 .setUserRentalId(uuidToString(house.getUserRentalId()))
-                .setName(nullToEmpty(house.getName()))
+                .setName(nullToEmpty(resolveVi(house.getName(), house.getNameTranslations())))
                 .setAddress(nullToEmpty(house.getAddress()))
                 .setCommune(nullToEmpty(house.getCommune()))
                 .setCity(nullToEmpty(house.getCity()))
-                .setDescription(nullToEmpty(house.getDescription()))
+                .setDescription(nullToEmpty(resolveVi(house.getDescription(), house.getDescriptionTranslations())))
                 .setStatus(mapHouseStatus(house.getStatus()))
                 .setCreatedAt(toTimestamp(house.getCreatedAt()))
                 .setUpdatedAt(toTimestamp(house.getUpdatedAt()));
@@ -42,14 +43,22 @@ public class HouseGrpcMapper {
     private FunctionalAreaResponse toFunctionalAreaResponse(FunctionalArea fa) {
         return FunctionalAreaResponse.newBuilder()
                 .setId(uuidToString(fa.getId()))
-                .setName(nullToEmpty(fa.getName()))
+                .setName(nullToEmpty(resolveVi(fa.getName(), fa.getNameTranslations())))
                 .setAreaType(mapAreaType(fa.getAreaType()))
                 .setFloorNo(nullToEmpty(fa.getFloorNo()))
-                .setDescription(nullToEmpty(fa.getDescription()))
+                .setDescription(nullToEmpty(resolveVi(fa.getDescription(), fa.getDescriptionTranslations())))
                 .setStatus(mapFunctionalAreaStatus(fa.getStatus()))
                 .setCreatedAt(toTimestamp(fa.getCreatedAt()))
                 .setUpdatedAt(toTimestamp(fa.getUpdatedAt()))
                 .build();
+    }
+
+    private String resolveVi(String source, TranslationMap translations) {
+        if (translations == null || translations.getTranslations().isEmpty()) {
+            return source;
+        }
+        String resolved = translations.getTranslations().get("vi");
+        return resolved != null && !resolved.isBlank() ? resolved : source;
     }
 
     private String nullToEmpty(String s) {

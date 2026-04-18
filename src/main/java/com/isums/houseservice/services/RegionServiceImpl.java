@@ -27,6 +27,7 @@ public class RegionServiceImpl implements RegionService {
     private final RegionRepository regionRepository;
     private final RegionMapper regionMapper;
     private final RegionStaffRepository regionStaffRepository;
+    private final TranslationAutoFillService translationAutoFillService;
 
     @Override
     @Transactional
@@ -40,7 +41,9 @@ public class RegionServiceImpl implements RegionService {
 
         Region region = Region.builder()
                 .name(request.name())
+                .nameTranslations(translationAutoFillService.complete(request.name()))
                 .description(request.description())
+                .descriptionTranslations(translationAutoFillService.complete(request.description()))
                 .managerId(managerUuid)
                 .build();
 
@@ -96,10 +99,12 @@ public class RegionServiceImpl implements RegionService {
 
         if (request.name() != null) {
             region.setName(request.name());
+            region.setNameTranslations(translationAutoFillService.complete(request.name()));
         }
 
         if (request.description() != null) {
             region.setDescription(request.description());
+            region.setDescriptionTranslations(translationAutoFillService.complete(request.description()));
         }
 
         if (request.technicalStaffIds() != null) {

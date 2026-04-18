@@ -1,6 +1,7 @@
 package com.isums.houseservice.infrastructures.grpcs;
 
 import com.isums.assetservice.grpc.*;
+import common.i18n.TranslationMap;
 import com.isums.houseservice.grpc.*;
 
 import com.isums.houseservice.infrastructures.repositories.HouseRepository;
@@ -43,7 +44,7 @@ public class AssetGrpcImpl extends AssetServiceGrpc.AssetServiceImplBase  {
                             .map(fa -> AssetItemDto.newBuilder()
                                     .setId(fa.getId().toString())
                                     .setHouseId(houseId.toString())
-                                    .setDisplayName(fa.getName() != null ? fa.getName() : "")
+                                    .setDisplayName(resolveVi(fa.getName(), fa.getNameTranslations()))
                                     .setSerialNumber("")
                                     .setNfcId("")
                                     .setConditionPercent(100)
@@ -59,5 +60,13 @@ public class AssetGrpcImpl extends AssetServiceGrpc.AssetServiceImplBase  {
                     Status.INTERNAL.withDescription("Internal server error").withCause(ex).asRuntimeException()
             );
         }
+    }
+
+    private String resolveVi(String source, TranslationMap translations) {
+        if (translations == null || translations.getTranslations().isEmpty()) {
+            return source != null ? source : "";
+        }
+        String resolved = translations.getTranslations().get("vi");
+        return resolved != null && !resolved.isBlank() ? resolved : (source != null ? source : "");
     }
 }

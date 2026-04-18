@@ -54,6 +54,7 @@ public class HouseServiceImpl implements HouseService {
     private final TenantGroupRepository tenantGroupRepository;
     private final TenantMemberRepository tenantMemberRepository;
     private final CachedPageService cachedPageService;
+    private final TranslationAutoFillService translationAutoFillService;
 
     private static final String PAGE_NS = "houses";
 
@@ -68,17 +69,22 @@ public class HouseServiceImpl implements HouseService {
 
         House house = House.builder()
                 .name(req.name())
+                .nameTranslations(translationAutoFillService.complete(req.name()))
                 .address(req.address())
+                .ward(req.ward())
                 .region(region)
                 .commune(req.commune())
                 .city(req.city())
                 .description(req.description())
+                .descriptionTranslations(translationAutoFillService.complete(req.description()))
                 .numberOfFloors(req.numberOfFloors())
+                .paymentRestricted(false)
                 .status(HouseStatus.AVAILABLE)
                 .createdAt(Instant.now())
                 .updatedAt(Instant.now())
                 .build();
         House created = houseRepository.save(house);
+        cachedPageService.evictAll(PAGE_NS);
         houseEventProducer.publishHouseCreated(created.getId());
         return houseMapper.toDto(created);
     }

@@ -1,5 +1,7 @@
 package com.isums.houseservice.domains.entities;
 
+import common.i18n.TranslationMap;
+import common.i18n.TranslationMapConverter;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -26,7 +28,15 @@ public class Region {
 
     private String name;
 
+    @Column(name = "name_translations", columnDefinition = "text")
+    @Convert(converter = TranslationMapConverter.class)
+    private TranslationMap nameTranslations;
+
     private String description;
+
+    @Column(name = "description_translations", columnDefinition = "text")
+    @Convert(converter = TranslationMapConverter.class)
+    private TranslationMap descriptionTranslations;
     @Column(nullable = false)
     private UUID managerId;
 
