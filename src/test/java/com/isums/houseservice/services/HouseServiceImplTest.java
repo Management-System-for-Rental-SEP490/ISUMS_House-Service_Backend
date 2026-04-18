@@ -49,6 +49,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.*;
@@ -91,6 +92,18 @@ class HouseServiceImplTest {
     @BeforeEach
     void setUp() {
         SecurityContextHolder.clearContext();
+        lenient().when(translationAutoFillService.complete(anyString()))
+                .thenAnswer(invocation -> {
+                    String text = invocation.getArgument(0, String.class);
+                    if (text == null) {
+                        return null;
+                    }
+                    return TranslationMap.of(java.util.Map.of(
+                            "vi", text,
+                            "en", text,
+                            "ja", text
+                    ));
+                });
         houseId  = UUID.randomUUID();
         userId   = UUID.randomUUID();
         regionId = UUID.randomUUID();

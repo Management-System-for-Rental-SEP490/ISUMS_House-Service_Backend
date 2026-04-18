@@ -41,14 +41,30 @@ public class House {
     @Column(columnDefinition = "text")
     private String address;
 
+    @Column(name = "address_translations", columnDefinition = "text")
+    @Convert(converter = TranslationMapConverter.class)
+    private TranslationMap addressTranslations;
+
     @Column(columnDefinition = "text")
     private String ward;
+
+    @Column(name = "ward_translations", columnDefinition = "text")
+    @Convert(converter = TranslationMapConverter.class)
+    private TranslationMap wardTranslations;
 
     @Column(columnDefinition = "text")
     private String commune;
 
+    @Column(name = "commune_translations", columnDefinition = "text")
+    @Convert(converter = TranslationMapConverter.class)
+    private TranslationMap communeTranslations;
+
     @Column(columnDefinition = "text")
     private String city;
+
+    @Column(name = "city_translations", columnDefinition = "text")
+    @Convert(converter = TranslationMapConverter.class)
+    private TranslationMap cityTranslations;
 
     @Column(columnDefinition = "text")
     private String description;

@@ -78,10 +78,14 @@ public class HouseServiceImpl implements HouseService {
                 .name(req.name())
                 .nameTranslations(translationAutoFillService.complete(req.name()))
                 .address(req.address())
+                .addressTranslations(translationAutoFillService.complete(req.address()))
                 .ward(req.ward())
+                .wardTranslations(translationAutoFillService.complete(req.ward()))
                 .region(region)
                 .commune(req.commune())
+                .communeTranslations(translationAutoFillService.complete(req.commune()))
                 .city(req.city())
+                .cityTranslations(translationAutoFillService.complete(req.city()))
                 .description(req.description())
                 .descriptionTranslations(translationAutoFillService.complete(req.description()))
                 .numberOfFloors(req.numberOfFloors())
@@ -293,8 +297,8 @@ public class HouseServiceImpl implements HouseService {
 
                 return new HouseAccessStatus(
                         house.getId(),
-                        house.getName(),
-                        house.getAddress(),
+                        resolveLocalized(house.getName(), house.getNameTranslations()),
+                        resolveLocalized(house.getAddress(), house.getAddressTranslations()),
                         isPendingNext ? house.getNextHandoverDate() : house.getHandoverDate(),
                         status,
                         reason,
@@ -304,6 +308,14 @@ public class HouseServiceImpl implements HouseService {
                 );
             }).toList();
         }
+
+    private String resolveLocalized(String source, common.i18n.TranslationMap translations) {
+        if (translations == null || translations.getTranslations().isEmpty()) {
+            return source;
+        }
+        String resolved = translations.resolve();
+        return resolved != null && !resolved.isBlank() ? resolved : source;
+    }
 
     @Override
     @Transactional
