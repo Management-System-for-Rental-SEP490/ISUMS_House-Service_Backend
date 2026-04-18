@@ -4,6 +4,7 @@ import com.isums.houseservice.domains.dtos.CreateHouseRequest;
 import com.isums.houseservice.domains.dtos.FunctionalAreaDto.FunctionalAreaDto;
 import com.isums.houseservice.domains.dtos.HouseAccessStatus;
 import com.isums.houseservice.domains.dtos.HouseDto;
+import com.isums.houseservice.domains.dtos.HouseHistoryItemDto;
 import com.isums.houseservice.domains.dtos.InvoiceStatusDto;
 import com.isums.houseservice.domains.emuns.AccessStatus;
 import com.isums.houseservice.domains.emuns.AreaType;
@@ -13,6 +14,7 @@ import com.isums.houseservice.domains.emuns.HouseStatus;
 import com.isums.houseservice.domains.entities.*;
 import com.isums.houseservice.exceptions.NotFoundException;
 import com.isums.houseservice.infrastructures.clients.AssetRestClient;
+import com.isums.houseservice.infrastructures.clients.HouseHistoryRestClient;
 import com.isums.houseservice.infrastructures.grpcs.PaymentGrpcClient;
 import com.isums.houseservice.infrastructures.grpcs.UserClientsGrpc;
 import com.isums.houseservice.infrastructures.kafkas.HouseEventProducer;
@@ -38,6 +40,8 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -64,6 +68,7 @@ class HouseServiceImplTest {
     @Mock private HouseImageRepository     houseImageRepository;
     @Mock private UserClientsGrpc          userClientsGrpc;
     @Mock private AssetRestClient          assetRestClient;
+    @Mock private HouseHistoryRestClient   houseHistoryRestClient;
     @Mock private PaymentGrpcClient        paymentGrpcClient;
     @Mock private TenantGroupRepository    tenantGroupRepository;
     @Mock private TenantMemberRepository   tenantMemberRepository;
@@ -270,6 +275,92 @@ class HouseServiceImplTest {
     }
 
     // ═════════════════════════════════════════════════════════════════════════
+    @Nested
+    @DisplayName("getHouseHistory")
+    class GetHouseHistoryTests {
+
+        @Test
+        @DisplayName("should aggregate maintenance, inspection, and issue items sorted by happenedAt desc")
+        void getHouseHistory_success() {
+            Jwt jwt = Jwt.withTokenValue("test-token")
+                    .header("alg", "none")
+                    .claim("sub", "tester")
+                    .build();
+            SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(jwt, null));
+
+            given(houseRepository.existsById(houseId)).willReturn(true);
+            given(houseHistoryRestClient.getMaintenanceJobsByHouseId(houseId, "test-token"))
+                    .willReturn(List.of(
+                            new HouseHistoryRestClient.MaintenanceJobItemDto(
+                                    UUID.randomUUID(), UUID.randomUUID(), houseId, UUID.randomUUID(),
+                                    "Staff A", "0901", null, LocalDate.of(2026, 4, 16), "CREATED"
+                            )
+                    ));
+            given(houseHistoryRestClient.getInspectionsByHouseId(houseId, "test-token"))
+                    .willReturn(List.of(
+                            new HouseHistoryRestClient.InspectionItemDto(
+                                    UUID.randomUUID(), houseId, UUID.randomUUID(), UUID.randomUUID(),
+                                    "Staff B", "0902", UUID.randomUUID(), "DONE", "CHECK_IN", "handover",
+                                    Instant.parse("2026-04-17T08:00:00Z"),
+                                    Instant.parse("2026-04-17T09:00:00Z")
+                            )
+                    ));
+            given(houseHistoryRestClient.getIssueTicketsByHouseId(houseId, "test-token"))
+                    .willReturn(List.of(
+                            new HouseHistoryRestClient.IssueTicketItemDto(
+                                    UUID.randomUUID(), UUID.randomUUID(), "0903", houseId, UUID.randomUUID(), UUID.randomUUID(),
+                                    "Staff C", "0904", UUID.randomUUID(),
+                                    LocalDateTime.of(2026, 4, 18, 10, 30), LocalDateTime.of(2026, 4, 18, 11, 0),
+                                    "REPAIR", "IN_PROGRESS", "Sửa máy lạnh", "máy lạnh chảy nước",
+                                    Instant.parse("2026-04-18T03:00:00Z"),
+                                    List.of(), null, null, null, null
+                            )
+                    ));
+
+            List<HouseHistoryItemDto> result = houseService.getHouseHistory(houseId);
+
+            assertThat(result).hasSize(3);
+            assertThat(result.get(0).source()).isEqualTo("ISSUE");
+            assertThat(result.get(0).title()).isEqualTo("Sửa máy lạnh");
+            assertThat(result.get(1).source()).isEqualTo("INSPECTION");
+            assertThat(result.get(1).type()).isEqualTo("CHECK_IN");
+            assertThat(result.get(2).source()).isEqualTo("MAINTENANCE");
+            assertThat(result.get(2).type()).isEqualTo("PERIODIC_MAINTENANCE");
+        }
+
+        @Test
+        @DisplayName("should return partial history when one downstream source fails")
+        void getHouseHistory_partialWhenOneSourceFails() {
+            Jwt jwt = Jwt.withTokenValue("test-token")
+                    .header("alg", "none")
+                    .claim("sub", "tester")
+                    .build();
+            SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(jwt, null));
+
+            given(houseRepository.existsById(houseId)).willReturn(true);
+            given(houseHistoryRestClient.getMaintenanceJobsByHouseId(houseId, "test-token"))
+                    .willThrow(new RuntimeException("maintenance down"));
+            given(houseHistoryRestClient.getInspectionsByHouseId(houseId, "test-token"))
+                    .willReturn(List.of());
+            given(houseHistoryRestClient.getIssueTicketsByHouseId(houseId, "test-token"))
+                    .willReturn(List.of(
+                            new HouseHistoryRestClient.IssueTicketItemDto(
+                                    UUID.randomUUID(), UUID.randomUUID(), "0903", houseId, null, null,
+                                    null, null, null,
+                                    null, null,
+                                    "REPAIR", "CREATED", "Sửa điện", "mất điện",
+                                    Instant.parse("2026-04-18T03:00:00Z"),
+                                    List.of(), null, null, null, null
+                            )
+                    ));
+
+            List<HouseHistoryItemDto> result = houseService.getHouseHistory(houseId);
+
+            assertThat(result).hasSize(1);
+            assertThat(result.getFirst().source()).isEqualTo("ISSUE");
+        }
+    }
+
     // getHouseByUserId
     // ═════════════════════════════════════════════════════════════════════════
 

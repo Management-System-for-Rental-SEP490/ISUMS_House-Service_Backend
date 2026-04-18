@@ -3,6 +3,7 @@ package com.isums.houseservice.infrastructures.abstracts;
 import com.isums.houseservice.domains.dtos.CreateHouseRequest;
 import com.isums.houseservice.domains.dtos.HouseAccessStatus;
 import com.isums.houseservice.domains.dtos.HouseDto;
+import com.isums.houseservice.domains.dtos.HouseHistoryItemDto;
 import com.isums.houseservice.domains.dtos.HouseImageDto;
 import com.isums.houseservice.domains.entities.House;
 import com.isums.houseservice.domains.entities.HouseImage;
@@ -20,6 +21,8 @@ public interface HouseService {
     PageResponse<HouseDto> getAll(PageRequest request);
 
     HouseDto getHouseById(UUID id);
+
+    List<HouseHistoryItemDto> getHouseHistory(UUID houseId);
 
     List<HouseDto> getHouseByUserId(String userId);
 

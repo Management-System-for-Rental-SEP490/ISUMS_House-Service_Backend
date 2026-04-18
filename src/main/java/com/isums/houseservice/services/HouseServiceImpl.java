@@ -6,6 +6,7 @@ import com.isums.houseservice.domains.emuns.HouseMemberRole;
 import com.isums.houseservice.domains.entities.*;
 import com.isums.houseservice.exceptions.NotFoundException;
 import com.isums.houseservice.infrastructures.clients.AssetRestClient;
+import com.isums.houseservice.infrastructures.clients.HouseHistoryRestClient;
 import com.isums.houseservice.infrastructures.abstracts.HouseService;
 import com.isums.houseservice.domains.emuns.HouseStatus;
 import com.isums.houseservice.infrastructures.grpcs.PaymentGrpcClient;
@@ -36,6 +37,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -54,6 +56,7 @@ public class HouseServiceImpl implements HouseService {
     private final HouseImageRepository houseImageRepository;
     private final UserClientsGrpc userClientsGrpc;
     private final AssetRestClient assetRestClient;
+    private final HouseHistoryRestClient houseHistoryRestClient;
     private final PaymentGrpcClient paymentGrpcClient;
     private final TenantGroupRepository tenantGroupRepository;
     private final TenantMemberRepository tenantMemberRepository;
@@ -492,6 +495,55 @@ public class HouseServiceImpl implements HouseService {
         }
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<HouseHistoryItemDto> getHouseHistory(UUID houseId) {
+        if (!houseRepository.existsById(houseId)) {
+            throw new RuntimeException("House not found");
+        }
+
+        String bearerToken = currentBearerToken();
+        if (bearerToken == null || bearerToken.isBlank()) {
+            return List.of();
+        }
+
+        List<HouseHistoryItemDto> items = new ArrayList<>();
+
+        try {
+            items.addAll(houseHistoryRestClient.getMaintenanceJobsByHouseId(houseId, bearerToken)
+                    .stream()
+                    .map(this::toHistoryItem)
+                    .toList());
+        } catch (Exception ex) {
+            log.warn("[House] getHouseHistory maintenance failed houseId={}: {}", houseId, ex.getMessage());
+        }
+
+        try {
+            items.addAll(houseHistoryRestClient.getInspectionsByHouseId(houseId, bearerToken)
+                    .stream()
+                    .map(this::toHistoryItem)
+                    .toList());
+        } catch (Exception ex) {
+            log.warn("[House] getHouseHistory inspections failed houseId={}: {}", houseId, ex.getMessage());
+        }
+
+        try {
+            items.addAll(houseHistoryRestClient.getIssueTicketsByHouseId(houseId, bearerToken)
+                    .stream()
+                    .map(this::toHistoryItem)
+                    .toList());
+        } catch (Exception ex) {
+            log.warn("[House] getHouseHistory issues failed houseId={}: {}", houseId, ex.getMessage());
+        }
+
+        return items.stream()
+                .sorted(Comparator
+                        .comparing(HouseHistoryItemDto::happenedAt, Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(HouseHistoryItemDto::createdAt, Comparator.nullsLast(Comparator.naturalOrder()))
+                        .reversed())
+                .toList();
+    }
+
     private String currentBearerToken() {
         Object principal = SecurityContextHolder.getContext().getAuthentication() != null
                 ? SecurityContextHolder.getContext().getAuthentication().getPrincipal()
@@ -500,5 +552,70 @@ public class HouseServiceImpl implements HouseService {
             return jwt.getTokenValue();
         }
         return null;
+    }
+
+    private HouseHistoryItemDto toHistoryItem(HouseHistoryRestClient.MaintenanceJobItemDto job) {
+        Instant happenedAt = job.periodStartDate() != null
+                ? job.periodStartDate().atStartOfDay(ZoneId.of("Asia/Ho_Chi_Minh")).toInstant()
+                : null;
+        return new HouseHistoryItemDto(
+                job.id(),
+                "MAINTENANCE",
+                "PERIODIC_MAINTENANCE",
+                job.status(),
+                "Bảo trì định kỳ",
+                null,
+                null,
+                null,
+                job.assignedStaffId(),
+                job.staffName(),
+                job.staffPhone(),
+                happenedAt,
+                happenedAt
+        );
+    }
+
+    private HouseHistoryItemDto toHistoryItem(HouseHistoryRestClient.InspectionItemDto inspection) {
+        String title = switch (String.valueOf(inspection.type())) {
+            case "CHECK_IN" -> "Kiểm tra check-in";
+            case "CHECK_OUT" -> "Kiểm tra check-out";
+            default -> "Kiểm tra nhà";
+        };
+        return new HouseHistoryItemDto(
+                inspection.id(),
+                "INSPECTION",
+                inspection.type(),
+                inspection.status(),
+                title,
+                inspection.note(),
+                null,
+                inspection.slotId(),
+                inspection.assignedStaffId(),
+                inspection.staffName(),
+                inspection.staffPhone(),
+                inspection.createdAt(),
+                inspection.updatedAt() != null ? inspection.updatedAt() : inspection.createdAt()
+        );
+    }
+
+    private HouseHistoryItemDto toHistoryItem(HouseHistoryRestClient.IssueTicketItemDto issue) {
+        Instant happenedAt = issue.startTime() != null
+                ? issue.startTime().atZone(ZoneId.of("Asia/Ho_Chi_Minh")).toInstant()
+                : issue.createdAt();
+        return new HouseHistoryItemDto(
+                issue.id(),
+                "ISSUE",
+                issue.type(),
+                issue.status(),
+                issue.title(),
+                issue.description(),
+                issue.assetId(),
+                issue.slotId(),
+                issue.assignedStaffId(),
+                issue.staffName(),
+                issue.staffPhone(),
+                issue.createdAt(),
+                happenedAt
+        );
     }
 }

@@ -46,6 +46,12 @@ public class HouseController {
         return ApiResponses.ok(house, "Success to get house by id");
     }
 
+    @GetMapping("/{id}/history")
+    public ApiResponse<List<HouseHistoryItemDto>> getHouseHistory(@PathVariable UUID id) {
+        List<HouseHistoryItemDto> res = houseService.getHouseHistory(id);
+        return ApiResponses.ok(res, "Success to get house history");
+    }
+
     @GetMapping("/house")
     public ApiResponse<List<HouseDto>> getMyHouses(@AuthenticationPrincipal Jwt jwt) {
         List<HouseDto> houses = houseService.getHouseByUserId(jwt.getSubject());
