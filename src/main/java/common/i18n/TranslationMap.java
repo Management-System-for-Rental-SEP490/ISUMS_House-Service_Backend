@@ -1,6 +1,12 @@
 package common.i18n;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.context.i18n.LocaleContextHolder;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.util.LinkedHashMap;
 import java.util.Locale;
@@ -27,7 +33,7 @@ public class TranslationMap {
 
     public String resolve() {
         if (translations.isEmpty()) return null;
-        String lang = LocaleContextHolder.getLocale().getLanguage();
+        String lang = resolveLanguage();
         if (lang == null || lang.isBlank()) lang = Locale.getDefault().getLanguage();
         String direct = translations.get(lang);
         if (direct != null && !direct.isBlank()) return direct;
@@ -39,6 +45,62 @@ public class TranslationMap {
                 .filter(v -> v != null && !v.isBlank())
                 .findFirst()
                 .orElse(null);
+    }
+
+    private String resolveLanguage() {
+        String headerLanguage = resolveHeaderLanguage();
+        if (headerLanguage != null) {
+            return headerLanguage;
+        }
+
+        String jwtLanguage = resolveJwtLanguage();
+        if (jwtLanguage != null) {
+            return jwtLanguage;
+        }
+
+        String localeLanguage = normalizeLanguage(LocaleContextHolder.getLocale() != null
+                ? LocaleContextHolder.getLocale().getLanguage()
+                : null);
+        if (localeLanguage != null) {
+            return localeLanguage;
+        }
+
+        return normalizeLanguage(Locale.getDefault().getLanguage());
+    }
+
+    private String resolveHeaderLanguage() {
+        if (!(RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes)) {
+            return null;
+        }
+        HttpServletRequest request = attributes.getRequest();
+        if (request == null) {
+            return null;
+        }
+        String header = request.getHeader("Accept-Language");
+        if (header == null || header.isBlank()) {
+            return null;
+        }
+        String candidate = header.split(",")[0].trim();
+        if (candidate.isBlank() || candidate.startsWith("*")) {
+            return null;
+        }
+        candidate = candidate.split(";")[0].trim();
+        return normalizeLanguage(Locale.forLanguageTag(candidate).getLanguage());
+    }
+
+    private String resolveJwtLanguage() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof Jwt jwt)) {
+            return null;
+        }
+        return normalizeLanguage(jwt.getClaimAsString("locale"));
+    }
+
+    private String normalizeLanguage(String language) {
+        if (language == null || language.isBlank()) {
+            return null;
+        }
+        return language.trim().toLowerCase(Locale.ROOT);
     }
 
     private static Map<String, String> normalize(Map<String, String> input) {
