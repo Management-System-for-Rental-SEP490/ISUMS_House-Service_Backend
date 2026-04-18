@@ -1,14 +1,18 @@
 package com.isums.houseservice.services;
 
 import com.isums.houseservice.domains.dtos.CreateHouseRequest;
+import com.isums.houseservice.domains.dtos.FunctionalAreaDto.FunctionalAreaDto;
 import com.isums.houseservice.domains.dtos.HouseAccessStatus;
 import com.isums.houseservice.domains.dtos.HouseDto;
 import com.isums.houseservice.domains.dtos.InvoiceStatusDto;
 import com.isums.houseservice.domains.emuns.AccessStatus;
+import com.isums.houseservice.domains.emuns.AreaType;
+import com.isums.houseservice.domains.emuns.FuctionalAreaStatus;
 import com.isums.houseservice.domains.emuns.HouseMemberRole;
 import com.isums.houseservice.domains.emuns.HouseStatus;
 import com.isums.houseservice.domains.entities.*;
 import com.isums.houseservice.exceptions.NotFoundException;
+import com.isums.houseservice.infrastructures.clients.AssetRestClient;
 import com.isums.houseservice.infrastructures.grpcs.PaymentGrpcClient;
 import com.isums.houseservice.infrastructures.grpcs.UserClientsGrpc;
 import com.isums.houseservice.infrastructures.kafkas.HouseEventProducer;
@@ -28,6 +32,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Instant;
@@ -56,6 +63,7 @@ class HouseServiceImplTest {
     @Mock private S3ServiceImpl            s3;
     @Mock private HouseImageRepository     houseImageRepository;
     @Mock private UserClientsGrpc          userClientsGrpc;
+    @Mock private AssetRestClient          assetRestClient;
     @Mock private PaymentGrpcClient        paymentGrpcClient;
     @Mock private TenantGroupRepository    tenantGroupRepository;
     @Mock private TenantMemberRepository   tenantMemberRepository;
@@ -77,6 +85,7 @@ class HouseServiceImplTest {
 
     @BeforeEach
     void setUp() {
+        SecurityContextHolder.clearContext();
         houseId  = UUID.randomUUID();
         userId   = UUID.randomUUID();
         regionId = UUID.randomUUID();
@@ -207,6 +216,46 @@ class HouseServiceImplTest {
             HouseDto result = houseService.getHouseById(houseId);
 
             assertThat(result).isEqualTo(houseDto);
+        }
+
+        @Test
+        @DisplayName("should enrich functionalAreas with assetCount from asset-service")
+        void getHouseById_enrichAssetCount() {
+            UUID kitchenId = UUID.randomUUID();
+            UUID livingRoomId = UUID.randomUUID();
+
+            HouseDto dtoWithAreas = new HouseDto(
+                    houseId, null, regionId,
+                    "Test House", "123 Street",
+                    "Ward 1", "Test Commune", "Test City",
+                    null, false, "Desc",
+                    HouseStatus.AVAILABLE,
+                    List.of(
+                            new FunctionalAreaDto(kitchenId, houseId, "Kitchen", AreaType.KITCHEN, "1", "desc", FuctionalAreaStatus.NORMAL, Instant.now(), Instant.now(), null),
+                            new FunctionalAreaDto(livingRoomId, houseId, "Living", AreaType.LIVINGROOM, "1", "desc", FuctionalAreaStatus.NORMAL, Instant.now(), Instant.now(), null)
+                    ),
+                    List.of()
+            );
+
+            Jwt jwt = Jwt.withTokenValue("test-token")
+                    .header("alg", "none")
+                    .claim("sub", "tester")
+                    .build();
+            SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(jwt, null));
+
+            given(houseRepository.findWithFunctionalAreasById(houseId)).willReturn(Optional.of(house));
+            given(houseMapper.toDto(house)).willReturn(dtoWithAreas);
+            given(assetRestClient.getAssetCountByHouseId(houseId, "test-token")).willReturn(List.of(
+                    new AssetRestClient.AreaAssetCountDto(kitchenId, 2),
+                    new AssetRestClient.AreaAssetCountDto(livingRoomId, 1),
+                    new AssetRestClient.AreaAssetCountDto(null, 99)
+            ));
+
+            HouseDto result = houseService.getHouseById(houseId);
+
+            assertThat(result.functionalAreas()).hasSize(2);
+            assertThat(result.functionalAreas().get(0).assetCount()).isEqualTo(2);
+            assertThat(result.functionalAreas().get(1).assetCount()).isEqualTo(1);
         }
 
         @Test

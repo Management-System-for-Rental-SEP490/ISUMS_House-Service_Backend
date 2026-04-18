@@ -5,6 +5,7 @@ import com.isums.houseservice.domains.emuns.AccessStatus;
 import com.isums.houseservice.domains.emuns.HouseMemberRole;
 import com.isums.houseservice.domains.entities.*;
 import com.isums.houseservice.exceptions.NotFoundException;
+import com.isums.houseservice.infrastructures.clients.AssetRestClient;
 import com.isums.houseservice.infrastructures.abstracts.HouseService;
 import com.isums.houseservice.domains.emuns.HouseStatus;
 import com.isums.houseservice.infrastructures.grpcs.PaymentGrpcClient;
@@ -23,6 +24,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -50,6 +53,7 @@ public class HouseServiceImpl implements HouseService {
     private final S3ServiceImpl s3;
     private final HouseImageRepository houseImageRepository;
     private final UserClientsGrpc userClientsGrpc;
+    private final AssetRestClient assetRestClient;
     private final PaymentGrpcClient paymentGrpcClient;
     private final TenantGroupRepository tenantGroupRepository;
     private final TenantMemberRepository tenantMemberRepository;
@@ -106,6 +110,23 @@ public class HouseServiceImpl implements HouseService {
                     .orElseThrow(() -> new RuntimeException("House not found"));
 
             HouseDto dto = houseMapper.toDto(house);
+            var assetCountByArea = loadAssetCountByArea(id);
+            var functionalAreas = dto.functionalAreas() == null
+                    ? List.<com.isums.houseservice.domains.dtos.FunctionalAreaDto.FunctionalAreaDto>of()
+                    : dto.functionalAreas().stream()
+                    .map(area -> new com.isums.houseservice.domains.dtos.FunctionalAreaDto.FunctionalAreaDto(
+                            area.id(),
+                            area.houseId(),
+                            area.name(),
+                            area.areaType(),
+                            area.floorNo(),
+                            area.description(),
+                            area.status(),
+                            area.createdAt(),
+                            area.updatedAt(),
+                            assetCountByArea.getOrDefault(area.id(), 0)
+                    ))
+                    .toList();
             return new HouseDto(
                     dto.id(),
                     dto.userRentalId(),
@@ -119,7 +140,7 @@ public class HouseServiceImpl implements HouseService {
                     dto.paymentRestricted(),
                     dto.description(),
                     dto.status(),
-                    dto.functionalAreas(),
+                    functionalAreas,
                     getHouseImages(id)
             );
         } catch (Exception ex) {
@@ -450,5 +471,34 @@ public class HouseServiceImpl implements HouseService {
         }
     private Duration contractEndBuffer() {
         return Duration.ofDays(1);
+    }
+
+    private Map<UUID, Integer> loadAssetCountByArea(UUID houseId) {
+        String bearerToken = currentBearerToken();
+        if (bearerToken == null || bearerToken.isBlank()) {
+            return Map.of();
+        }
+
+        try {
+            return assetRestClient.getAssetCountByHouseId(houseId, bearerToken).stream()
+                    .filter(asset -> asset.functionAreaId() != null)
+                    .collect(Collectors.toMap(
+                            AssetRestClient.AreaAssetCountDto::functionAreaId,
+                            asset -> Math.toIntExact(asset.assetCount())
+                    ));
+        } catch (Exception ex) {
+            log.warn("[House] loadAssetCountByArea failed houseId={}: {}", houseId, ex.getMessage());
+            return Map.of();
+        }
+    }
+
+    private String currentBearerToken() {
+        Object principal = SecurityContextHolder.getContext().getAuthentication() != null
+                ? SecurityContextHolder.getContext().getAuthentication().getPrincipal()
+                : null;
+        if (principal instanceof Jwt jwt) {
+            return jwt.getTokenValue();
+        }
+        return null;
     }
 }
