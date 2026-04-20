@@ -15,6 +15,7 @@ public record FunctionalAreaDto(
     String description,
     FuctionalAreaStatus status,
     Instant createdAt,
-    Instant updatedAt
+    Instant updatedAt,
+    Integer assetCount
 ){
 }

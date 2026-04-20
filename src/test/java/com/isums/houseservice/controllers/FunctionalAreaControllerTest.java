@@ -55,7 +55,7 @@ class FunctionalAreaControllerTest {
 
     private FunctionalAreaDto dto(UUID id, UUID houseId) {
         return new FunctionalAreaDto(id, houseId, "Kitchen", AreaType.KITCHEN,
-                "1", "desc", FuctionalAreaStatus.NORMAL, Instant.now(), Instant.now());
+                "1", "desc", FuctionalAreaStatus.NORMAL, Instant.now(), Instant.now(), null);
     }
 
     @Test

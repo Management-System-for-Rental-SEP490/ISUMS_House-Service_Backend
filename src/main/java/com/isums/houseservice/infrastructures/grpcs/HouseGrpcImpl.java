@@ -82,8 +82,14 @@ public class HouseGrpcImpl extends HouseServiceGrpc.HouseServiceImplBase {
                             .withDescription("Region not found for house")
                             .asRuntimeException());
 
+            Region region = regionRepository.findById(regionId)
+                    .orElseThrow(() -> Status.NOT_FOUND
+                            .withDescription("Region not found for house")
+                            .asRuntimeException());
+
             GetRegionResponse res = GetRegionResponse.newBuilder()
                     .setRegionId(regionId.toString())
+                    .setManagerId(region.getManagerId() != null ? region.getManagerId().toString() : "")
                     .build();
 
             responseObserver.onNext(res);

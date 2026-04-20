@@ -58,7 +58,7 @@ class FunctionAreaServiceImplTest {
 
     private FunctionalAreaDto dto() {
         return new FunctionalAreaDto(areaId, houseId, "Kitchen", AreaType.KITCHEN,
-                "1", "desc", FuctionalAreaStatus.NORMAL, Instant.now(), Instant.now());
+                "1", "desc", FuctionalAreaStatus.NORMAL, Instant.now(), Instant.now(), null);
     }
 
     @Nested

@@ -15,6 +15,7 @@ public interface FunctionalAreaMapper {
     @Mapping(source = "house.id",target = "houseId")
     @Mapping(target = "name", expression = "java(resolveLocalized(functionalArea.getName(), functionalArea.getNameTranslations()))")
     @Mapping(target = "description", expression = "java(resolveLocalized(functionalArea.getDescription(), functionalArea.getDescriptionTranslations()))")
+    @Mapping(target = "assetCount", ignore = true)
     FunctionalAreaDto mapFunc (FunctionalArea functionalArea);
     List<FunctionalAreaDto> mapFuncs (List<FunctionalArea> functionalAreas);
 
