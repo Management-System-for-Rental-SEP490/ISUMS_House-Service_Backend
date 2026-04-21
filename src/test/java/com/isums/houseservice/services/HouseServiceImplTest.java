@@ -6,6 +6,7 @@ import com.isums.houseservice.domains.dtos.HouseAccessStatus;
 import com.isums.houseservice.domains.dtos.HouseDto;
 import com.isums.houseservice.domains.dtos.HouseHistoryItemDto;
 import com.isums.houseservice.domains.dtos.InvoiceStatusDto;
+import com.isums.houseservice.domains.dtos.UpdateHouseTranslationsRequest;
 import com.isums.houseservice.domains.emuns.AccessStatus;
 import com.isums.houseservice.domains.emuns.AreaType;
 import com.isums.houseservice.domains.emuns.FuctionalAreaStatus;
@@ -34,15 +35,25 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.multipart.MultipartFile;
 
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Path;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -92,6 +103,7 @@ class HouseServiceImplTest {
     @BeforeEach
     void setUp() {
         SecurityContextHolder.clearContext();
+        // Default lenient stubs for both overloads of complete(...)
         lenient().when(translationAutoFillService.complete(anyString()))
                 .thenAnswer(invocation -> {
                     String text = invocation.getArgument(0, String.class);
@@ -103,6 +115,27 @@ class HouseServiceImplTest {
                             "en", text,
                             "ja", text
                     ));
+                });
+        lenient().when(translationAutoFillService.complete(anyString(), any()))
+                .thenAnswer(invocation -> {
+                    String text = invocation.getArgument(0, String.class);
+                    @SuppressWarnings("unchecked")
+                    Map<String, String> overrides = invocation.getArgument(1, Map.class);
+                    if (text == null || text.isBlank()) {
+                        return null;
+                    }
+                    Map<String, String> out = new java.util.LinkedHashMap<>();
+                    out.put("vi", text);
+                    out.put("en", text);
+                    out.put("ja", text);
+                    if (overrides != null) {
+                        for (Map.Entry<String, String> e : overrides.entrySet()) {
+                            if (e.getKey() == null || e.getKey().isBlank()) continue;
+                            if (e.getValue() == null || e.getValue().isBlank()) continue;
+                            out.put(e.getKey().trim().toLowerCase(java.util.Locale.ROOT), e.getValue().trim());
+                        }
+                    }
+                    return TranslationMap.of(out);
                 });
         houseId  = UUID.randomUUID();
         userId   = UUID.randomUUID();
@@ -135,7 +168,8 @@ class HouseServiceImplTest {
                 "Test House", "123 Street",
                 "Ward 1", "Test Commune", "Test City",
                 null, false, "Desc",
-                HouseStatus.AVAILABLE, List.of(), List.of()
+                HouseStatus.AVAILABLE, List.of(), List.of(),
+                Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of()
         );
     }
 
@@ -153,17 +187,14 @@ class HouseServiceImplTest {
         void setUp() {
             req = new CreateHouseRequest(
                     "Test House", "123 Street", regionId,
-                    "Ward 1", "Test Commune", "Test City", "Desc", 3, List.of()
+                    "Ward 1", "Test Commune", "Test City", "Desc", 3, List.of(),
+                    null, null, null, null, null, null
             );
         }
 
         @Test
         @DisplayName("should create house, publish event, and return dto on success")
         void createHouse_success() {
-            given(translationAutoFillService.complete("Test House"))
-                    .willReturn(TranslationMap.of(java.util.Map.of("vi", "Test House", "en", "Test House", "ja", "テストハウス")));
-            given(translationAutoFillService.complete("Desc"))
-                    .willReturn(TranslationMap.of(java.util.Map.of("vi", "Desc", "en", "Desc", "ja", "説明")));
             given(regionRepository.findById(regionId)).willReturn(Optional.of(region));
             given(houseRepository.save(any(House.class))).willReturn(house);
             given(houseMapper.toDto(house)).willReturn(houseDto);
@@ -177,12 +208,8 @@ class HouseServiceImplTest {
         }
 
         @Test
-        @DisplayName("saved house has AVAILABLE status and correct fields")
+        @DisplayName("saved house has AVAILABLE status and correct fields (no manual overrides)")
         void createHouse_persistedEntityHasCorrectFields() {
-            given(translationAutoFillService.complete("Test House"))
-                    .willReturn(TranslationMap.of(java.util.Map.of("vi", "Test House", "en", "Test House", "ja", "テストハウス")));
-            given(translationAutoFillService.complete("Desc"))
-                    .willReturn(TranslationMap.of(java.util.Map.of("vi", "Desc", "en", "Desc", "ja", "説明")));
             given(regionRepository.findById(regionId)).willReturn(Optional.of(region));
             given(houseRepository.save(any(House.class))).willReturn(house);
             given(houseMapper.toDto(house)).willReturn(houseDto);
@@ -202,6 +229,72 @@ class HouseServiceImplTest {
             assertThat(saved.getHouseImages()).isEmpty();
             assertThat(saved.getRegion()).isEqualTo(region);
             assertThat(saved.getCreatedAt()).isNotNull();
+
+            // TranslationAutoFillService invoked with null overrides for every translatable field
+            verify(translationAutoFillService).complete("Test House", null);
+            verify(translationAutoFillService).complete("123 Street", null);
+            verify(translationAutoFillService).complete("Ward 1", null);
+            verify(translationAutoFillService).complete("Test Commune", null);
+            verify(translationAutoFillService).complete("Test City", null);
+            verify(translationAutoFillService).complete("Desc", null);
+        }
+
+        @Test
+        @DisplayName("manager-supplied translation overrides are propagated to the translation service per field")
+        void createHouse_withManualOverrides_propagatesToService() {
+            CreateHouseRequest reqWithOverrides = new CreateHouseRequest(
+                    "Nhà Hiệu Q7", "123 NVL", regionId,
+                    "P.Tân Phong", "", "TP.HCM", "Nhà 3 tầng", 3, List.of(),
+                    Map.of("en", "Hieu Mansion D7"),              // override EN only → AI fills JA
+                    Map.of("en", "123 NVL addr", "ja", "123 NVL 住所"), // override EN + JA
+                    null,                                          // all AI
+                    null,
+                    Map.of("ja", "HCM市（手動）"),                   // override JA only
+                    null
+            );
+
+            given(regionRepository.findById(regionId)).willReturn(Optional.of(region));
+            given(houseRepository.save(any(House.class))).willReturn(house);
+            given(houseMapper.toDto(house)).willReturn(houseDto);
+
+            houseService.CreateHouse(reqWithOverrides);
+
+            verify(translationAutoFillService).complete(eq("Nhà Hiệu Q7"),
+                    eq(Map.of("en", "Hieu Mansion D7")));
+            verify(translationAutoFillService).complete(eq("123 NVL"),
+                    eq(Map.of("en", "123 NVL addr", "ja", "123 NVL 住所")));
+            verify(translationAutoFillService).complete("P.Tân Phong", null);
+            verify(translationAutoFillService).complete("", null);
+            verify(translationAutoFillService).complete(eq("TP.HCM"),
+                    eq(Map.of("ja", "HCM市（手動）")));
+            verify(translationAutoFillService).complete("Nhà 3 tầng", null);
+        }
+
+        @Test
+        @DisplayName("saved TranslationMap contains manager overrides alongside auto-filled locales")
+        void createHouse_persistedTranslationsContainOverrides() {
+            CreateHouseRequest reqWithOverrides = new CreateHouseRequest(
+                    "Nhà Hiệu Q7", "123 Street", regionId,
+                    "Ward 1", "Test Commune", "Test City", "Desc", 3, List.of(),
+                    Map.of("en", "Hieu Mansion D7"),
+                    null, null, null, null, null
+            );
+
+            given(regionRepository.findById(regionId)).willReturn(Optional.of(region));
+            given(houseRepository.save(any(House.class))).willReturn(house);
+            given(houseMapper.toDto(house)).willReturn(houseDto);
+
+            houseService.CreateHouse(reqWithOverrides);
+
+            ArgumentCaptor<House> captor = ArgumentCaptor.forClass(House.class);
+            verify(houseRepository).save(captor.capture());
+            House saved = captor.getValue();
+
+            Map<String, String> nameMap = saved.getNameTranslations().getTranslations();
+            // Our lenient stub echoes text for ai locales and honours overrides → expect en=override, ja=auto
+            assertThat(nameMap).containsEntry("en", "Hieu Mansion D7");
+            assertThat(nameMap).containsEntry("vi", "Nhà Hiệu Q7");
+            assertThat(nameMap).containsEntry("ja", "Nhà Hiệu Q7"); // stub's auto-fill echoes source
         }
 
         @Test
@@ -252,7 +345,8 @@ class HouseServiceImplTest {
                             new FunctionalAreaDto(kitchenId, houseId, "Kitchen", AreaType.KITCHEN, "1", "desc", FuctionalAreaStatus.NORMAL, Instant.now(), Instant.now(), null),
                             new FunctionalAreaDto(livingRoomId, houseId, "Living", AreaType.LIVINGROOM, "1", "desc", FuctionalAreaStatus.NORMAL, Instant.now(), Instant.now(), null)
                     ),
-                    List.of()
+                    List.of(),
+                    Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of()
             );
 
             Jwt jwt = Jwt.withTokenValue("test-token")
@@ -1082,6 +1176,385 @@ class HouseServiceImplTest {
             PageResponse<HouseDto> result = houseService.getAll(request);
 
             assertThat(result).isSameAs(expected);
+        }
+
+        @Test
+        @DisplayName("should build local spec and filter houseId by entity id")
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        void getAll_filtersHouseIdByEntityId() {
+            PageRequest request = PageRequest.builder()
+                    .page(0)
+                    .size(10)
+                    .keyword("Test")
+                    .filters(Map.of(
+                            "status", "available",
+                            "statuses", "AVAILABLE,INACTIVE",
+                            "houseId", houseId.toString()
+                    ))
+                    .build();
+
+            ArgumentCaptor<Specification<House>> specCaptor = ArgumentCaptor.forClass(Specification.class);
+
+            doAnswer(invocation -> invocation.<java.util.function.Supplier<PageResponse<HouseDto>>>getArgument(3).get())
+                    .when(cachedPageService)
+                    .getOrLoad(eq("houses"), eq(request), any(), any());
+
+            given(houseRepository.findAll(specCaptor.capture(), any(Pageable.class)))
+                    .willReturn(new PageImpl<>(List.of(house)));
+            given(houseMapper.toDto(house)).willReturn(houseDto);
+            given(houseImageRepository.findByHouseId(houseId)).willReturn(List.of());
+
+            PageResponse<HouseDto> result = houseService.getAll(request);
+
+            assertThat(result.items()).containsExactly(houseDto);
+
+            Specification<House> spec = specCaptor.getValue();
+            Root<House> root = mock(Root.class);
+            CriteriaQuery<?> query = mock(CriteriaQuery.class);
+            CriteriaBuilder criteriaBuilder = mock(CriteriaBuilder.class);
+            Path<String> namePath = mock(Path.class);
+            Path<String> addressPath = mock(Path.class);
+            Path<Object> statusPath = mock(Path.class);
+            Path<Object> idPath = mock(Path.class);
+            Expression<String> lowerName = mock(Expression.class);
+            Expression<String> lowerAddress = mock(Expression.class);
+            Predicate keywordPredicate = mock(Predicate.class);
+            Predicate statusPredicate = mock(Predicate.class);
+            Predicate statusesPredicate = mock(Predicate.class);
+            Predicate idPredicate = mock(Predicate.class);
+            Predicate finalPredicate = mock(Predicate.class);
+
+            given(root.get("name")).willReturn((Path) namePath);
+            given(root.get("address")).willReturn((Path) addressPath);
+            given(root.get("status")).willReturn((Path) statusPath);
+            given(root.get("id")).willReturn((Path) idPath);
+            given(criteriaBuilder.lower(namePath)).willReturn(lowerName);
+            given(criteriaBuilder.lower(addressPath)).willReturn(lowerAddress);
+            given(criteriaBuilder.like(lowerName, "%test%")).willReturn(keywordPredicate);
+            given(criteriaBuilder.like(lowerAddress, "%test%")).willReturn(keywordPredicate);
+            given(criteriaBuilder.or(keywordPredicate, keywordPredicate)).willReturn(keywordPredicate);
+            given(criteriaBuilder.equal(statusPath, HouseStatus.AVAILABLE)).willReturn(statusPredicate);
+            given(statusPath.in(any(java.util.Collection.class))).willReturn(statusesPredicate);
+            given(criteriaBuilder.equal(idPath, houseId)).willReturn(idPredicate);
+            given(criteriaBuilder.and(any(Predicate[].class))).willReturn(finalPredicate);
+
+            Predicate predicate = spec.toPredicate(root, query, criteriaBuilder);
+
+            assertThat(predicate).isSameAs(finalPredicate);
+            verify(root).get("id");
+            verify(root, never()).get("houseId");
+            verify(criteriaBuilder).equal(idPath, houseId);
+        }
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // updateHouseTranslations
+    // ═════════════════════════════════════════════════════════════════════════
+
+    @Nested
+    @DisplayName("updateHouseTranslations")
+    class UpdateHouseTranslationsTests {
+
+        @BeforeEach
+        void seedExistingTranslations() {
+            // Start each test with full vi/en/ja for every translatable field
+            house.setNameTranslations(TranslationMap.of(Map.of(
+                    "vi", "Nhà Hiệu Quận 7",
+                    "en", "Hieu House District 7",
+                    "ja", "ヒューの家 7区"
+            )));
+            house.setAddressTranslations(TranslationMap.of(Map.of(
+                    "vi", "123 Nguyễn Văn Linh",
+                    "en", "123 Nguyen Van Linh",
+                    "ja", "123 グエンヴァンリン"
+            )));
+            house.setWardTranslations(TranslationMap.of(Map.of(
+                    "vi", "Phường Tân Phong", "en", "Tan Phong Ward", "ja", "タンフォン町"
+            )));
+            house.setCommuneTranslations(TranslationMap.of(Map.of(
+                    "vi", "", "en", "", "ja", ""
+            )));
+            house.setCityTranslations(TranslationMap.of(Map.of(
+                    "vi", "TP. Hồ Chí Minh", "en", "Ho Chi Minh City", "ja", "ホーチミン市"
+            )));
+            house.setDescriptionTranslations(TranslationMap.of(Map.of(
+                    "vi", "Nhà 3 tầng view sông",
+                    "en", "3-floor house with river view",
+                    "ja", "3階建ての家、川ビュー"
+            )));
+            // Base Vietnamese columns match the 'vi' value in each TranslationMap
+            house.setName("Nhà Hiệu Quận 7");
+            house.setAddress("123 Nguyễn Văn Linh");
+            house.setWard("Phường Tân Phong");
+            house.setCommune("");
+            house.setCity("TP. Hồ Chí Minh");
+            house.setDescription("Nhà 3 tầng view sông");
+        }
+
+        @Test
+        @DisplayName("throws NotFoundException when house not found")
+        void notFound_throws() {
+            given(houseRepository.findById(houseId)).willReturn(Optional.empty());
+
+            UpdateHouseTranslationsRequest req = new UpdateHouseTranslationsRequest(
+                    Map.of("ja", "xxx"), null, null, null, null, null
+            );
+
+            assertThatThrownBy(() -> houseService.updateHouseTranslations(houseId, req))
+                    .isInstanceOf(NotFoundException.class)
+                    .hasMessageContaining("House not found");
+
+            verify(houseRepository, never()).save(any());
+            verifyNoInteractions(cachedPageService);
+        }
+
+        @Test
+        @DisplayName("patch only description-ja: keeps all other locales & fields unchanged")
+        void patchOnlyJaDescription_preservesOthers() {
+            given(houseRepository.findById(houseId)).willReturn(Optional.of(house));
+            given(houseRepository.save(any(House.class))).willAnswer(inv -> inv.getArgument(0));
+            given(houseMapper.toDto(any(House.class))).willReturn(houseDto);
+
+            UpdateHouseTranslationsRequest req = new UpdateHouseTranslationsRequest(
+                    null, null, null, null, null,
+                    Map.of("ja", "3階建て、川ビューの家（訂正版）")
+            );
+
+            houseService.updateHouseTranslations(houseId, req);
+
+            ArgumentCaptor<House> captor = ArgumentCaptor.forClass(House.class);
+            verify(houseRepository).save(captor.capture());
+            House saved = captor.getValue();
+
+            // description: only JA replaced, VI+EN preserved
+            Map<String, String> desc = saved.getDescriptionTranslations().getTranslations();
+            assertThat(desc).containsEntry("ja", "3階建て、川ビューの家（訂正版）");
+            assertThat(desc).containsEntry("vi", "Nhà 3 tầng view sông");
+            assertThat(desc).containsEntry("en", "3-floor house with river view");
+
+            // Base VI column of description not touched (patch has no 'vi' key)
+            assertThat(saved.getDescription()).isEqualTo("Nhà 3 tầng view sông");
+
+            // Other fields completely untouched
+            assertThat(saved.getNameTranslations().getTranslations())
+                    .containsEntry("ja", "ヒューの家 7区");
+            assertThat(saved.getAddressTranslations().getTranslations())
+                    .containsEntry("en", "123 Nguyen Van Linh");
+            assertThat(saved.getCityTranslations().getTranslations())
+                    .containsEntry("ja", "ホーチミン市");
+        }
+
+        @Test
+        @DisplayName("patch containing vi syncs base column in addition to translation map")
+        void patchWithVi_syncsBaseColumn() {
+            given(houseRepository.findById(houseId)).willReturn(Optional.of(house));
+            given(houseRepository.save(any(House.class))).willAnswer(inv -> inv.getArgument(0));
+            given(houseMapper.toDto(any(House.class))).willReturn(houseDto);
+
+            UpdateHouseTranslationsRequest req = new UpdateHouseTranslationsRequest(
+                    Map.of("vi", "Nhà Hiệu Q7 (sửa)"),
+                    null, null, null, null, null
+            );
+
+            houseService.updateHouseTranslations(houseId, req);
+
+            ArgumentCaptor<House> captor = ArgumentCaptor.forClass(House.class);
+            verify(houseRepository).save(captor.capture());
+            House saved = captor.getValue();
+
+            assertThat(saved.getName()).isEqualTo("Nhà Hiệu Q7 (sửa)");
+            assertThat(saved.getNameTranslations().getTranslations())
+                    .containsEntry("vi", "Nhà Hiệu Q7 (sửa)")
+                    .containsEntry("en", "Hieu House District 7")
+                    .containsEntry("ja", "ヒューの家 7区");
+        }
+
+        @Test
+        @DisplayName("patch multiple fields at once merges each independently")
+        void patchMultipleFields_merged() {
+            given(houseRepository.findById(houseId)).willReturn(Optional.of(house));
+            given(houseRepository.save(any(House.class))).willAnswer(inv -> inv.getArgument(0));
+            given(houseMapper.toDto(any(House.class))).willReturn(houseDto);
+
+            UpdateHouseTranslationsRequest req = new UpdateHouseTranslationsRequest(
+                    Map.of("en", "Hieu Mansion D7"),
+                    null, null, null,
+                    Map.of("ja", "HCM市 (訂正)"),
+                    Map.of("en", "Three-storey river-view house")
+            );
+
+            houseService.updateHouseTranslations(houseId, req);
+
+            ArgumentCaptor<House> captor = ArgumentCaptor.forClass(House.class);
+            verify(houseRepository).save(captor.capture());
+            House saved = captor.getValue();
+
+            assertThat(saved.getNameTranslations().getTranslations())
+                    .containsEntry("en", "Hieu Mansion D7")
+                    .containsEntry("vi", "Nhà Hiệu Quận 7")
+                    .containsEntry("ja", "ヒューの家 7区");
+            assertThat(saved.getCityTranslations().getTranslations())
+                    .containsEntry("ja", "HCM市 (訂正)")
+                    .containsEntry("vi", "TP. Hồ Chí Minh");
+            assertThat(saved.getDescriptionTranslations().getTranslations())
+                    .containsEntry("en", "Three-storey river-view house")
+                    .containsEntry("ja", "3階建ての家、川ビュー");
+            // Address/Ward/Commune untouched
+            assertThat(saved.getAddressTranslations().getTranslations())
+                    .containsEntry("vi", "123 Nguyễn Văn Linh");
+        }
+
+        @Test
+        @DisplayName("empty / all-null request leaves translations unchanged but saves with bumped updatedAt")
+        void emptyRequest_noTranslationChangesButSaves() {
+            Instant oldUpdatedAt = Instant.now().minusSeconds(3600);
+            house.setUpdatedAt(oldUpdatedAt);
+
+            given(houseRepository.findById(houseId)).willReturn(Optional.of(house));
+            given(houseRepository.save(any(House.class))).willAnswer(inv -> inv.getArgument(0));
+            given(houseMapper.toDto(any(House.class))).willReturn(houseDto);
+
+            UpdateHouseTranslationsRequest req = new UpdateHouseTranslationsRequest(
+                    null, null, null, null, null, null
+            );
+
+            houseService.updateHouseTranslations(houseId, req);
+
+            ArgumentCaptor<House> captor = ArgumentCaptor.forClass(House.class);
+            verify(houseRepository).save(captor.capture());
+            House saved = captor.getValue();
+
+            // All translations preserved as-is
+            assertThat(saved.getNameTranslations().getTranslations())
+                    .containsEntry("vi", "Nhà Hiệu Quận 7")
+                    .containsEntry("en", "Hieu House District 7")
+                    .containsEntry("ja", "ヒューの家 7区");
+            // Base VI columns preserved
+            assertThat(saved.getName()).isEqualTo("Nhà Hiệu Quận 7");
+            // updatedAt moved forward
+            assertThat(saved.getUpdatedAt()).isAfter(oldUpdatedAt);
+        }
+
+        @Test
+        @DisplayName("blank / null values in patch are skipped (existing value retained)")
+        void blankValuesInPatch_skipped() {
+            given(houseRepository.findById(houseId)).willReturn(Optional.of(house));
+            given(houseRepository.save(any(House.class))).willAnswer(inv -> inv.getArgument(0));
+            given(houseMapper.toDto(any(House.class))).willReturn(houseDto);
+
+            // Java Map.of() disallows null values, so use a mutable map for the null-value case
+            Map<String, String> patch = new java.util.HashMap<>();
+            patch.put("en", "   ");   // blank → skipped
+            patch.put("ja", null);    // null  → skipped
+            patch.put("vi", "Nhà đã sửa");
+
+            UpdateHouseTranslationsRequest req = new UpdateHouseTranslationsRequest(
+                    patch, null, null, null, null, null
+            );
+
+            houseService.updateHouseTranslations(houseId, req);
+
+            ArgumentCaptor<House> captor = ArgumentCaptor.forClass(House.class);
+            verify(houseRepository).save(captor.capture());
+            House saved = captor.getValue();
+
+            Map<String, String> nameMap = saved.getNameTranslations().getTranslations();
+            assertThat(nameMap).containsEntry("vi", "Nhà đã sửa");
+            // EN & JA preserved, not overwritten with blank/null
+            assertThat(nameMap).containsEntry("en", "Hieu House District 7");
+            assertThat(nameMap).containsEntry("ja", "ヒューの家 7区");
+            // Base column synced from VI
+            assertThat(saved.getName()).isEqualTo("Nhà đã sửa");
+        }
+
+        @Test
+        @DisplayName("locale keys are normalized to lowercase")
+        void localeKeys_normalizedLowercase() {
+            given(houseRepository.findById(houseId)).willReturn(Optional.of(house));
+            given(houseRepository.save(any(House.class))).willAnswer(inv -> inv.getArgument(0));
+            given(houseMapper.toDto(any(House.class))).willReturn(houseDto);
+
+            UpdateHouseTranslationsRequest req = new UpdateHouseTranslationsRequest(
+                    Map.of("  JA  ", "大文字JAパッチ"),
+                    null, null, null, null, null
+            );
+
+            houseService.updateHouseTranslations(houseId, req);
+
+            ArgumentCaptor<House> captor = ArgumentCaptor.forClass(House.class);
+            verify(houseRepository).save(captor.capture());
+            House saved = captor.getValue();
+
+            Map<String, String> nameMap = saved.getNameTranslations().getTranslations();
+            assertThat(nameMap).containsEntry("ja", "大文字JAパッチ");
+            // Should not have the upper-case or space-padded variant
+            assertThat(nameMap).doesNotContainKey("  JA  ");
+            assertThat(nameMap).doesNotContainKey("JA");
+        }
+
+        @Test
+        @DisplayName("adds a new locale when existing TranslationMap does not have it")
+        void addsNewLocale() {
+            // Seed with only VI (no EN/JA) on the name field
+            house.setNameTranslations(TranslationMap.of(Map.of("vi", "Nhà VI only")));
+            house.setName("Nhà VI only");
+
+            given(houseRepository.findById(houseId)).willReturn(Optional.of(house));
+            given(houseRepository.save(any(House.class))).willAnswer(inv -> inv.getArgument(0));
+            given(houseMapper.toDto(any(House.class))).willReturn(houseDto);
+
+            UpdateHouseTranslationsRequest req = new UpdateHouseTranslationsRequest(
+                    Map.of("en", "VI-only house", "ja", "VIだけの家"),
+                    null, null, null, null, null
+            );
+
+            houseService.updateHouseTranslations(houseId, req);
+
+            ArgumentCaptor<House> captor = ArgumentCaptor.forClass(House.class);
+            verify(houseRepository).save(captor.capture());
+            House saved = captor.getValue();
+
+            assertThat(saved.getNameTranslations().getTranslations())
+                    .containsEntry("vi", "Nhà VI only")
+                    .containsEntry("en", "VI-only house")
+                    .containsEntry("ja", "VIだけの家");
+            // No 'vi' in patch → base column not touched
+            assertThat(saved.getName()).isEqualTo("Nhà VI only");
+        }
+
+        @Test
+        @DisplayName("evicts pagination cache and returns mapper DTO on success")
+        void evictsCacheAndReturnsDto() {
+            given(houseRepository.findById(houseId)).willReturn(Optional.of(house));
+            House savedEntity = house;
+            given(houseRepository.save(any(House.class))).willReturn(savedEntity);
+            given(houseMapper.toDto(savedEntity)).willReturn(houseDto);
+
+            UpdateHouseTranslationsRequest req = new UpdateHouseTranslationsRequest(
+                    Map.of("ja", "ヒュー邸"), null, null, null, null, null
+            );
+
+            HouseDto result = houseService.updateHouseTranslations(houseId, req);
+
+            assertThat(result).isSameAs(houseDto);
+            verify(cachedPageService).evictAll("houses");
+            verify(houseMapper).toDto(savedEntity);
+        }
+
+        @Test
+        @DisplayName("never invokes AI auto-fill translation service (manual patch only)")
+        void neverInvokesAutoFill() {
+            given(houseRepository.findById(houseId)).willReturn(Optional.of(house));
+            given(houseRepository.save(any(House.class))).willAnswer(inv -> inv.getArgument(0));
+            given(houseMapper.toDto(any(House.class))).willReturn(houseDto);
+
+            UpdateHouseTranslationsRequest req = new UpdateHouseTranslationsRequest(
+                    Map.of("ja", "新しい名前"), null, null, null, null, null
+            );
+
+            houseService.updateHouseTranslations(houseId, req);
+
+            verify(translationAutoFillService, never()).complete(anyString());
         }
     }
 }

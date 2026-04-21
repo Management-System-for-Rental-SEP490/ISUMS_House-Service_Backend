@@ -1,6 +1,7 @@
 package com.isums.houseservice.services;
 
 import com.isums.houseservice.domains.dtos.*;
+import common.i18n.TranslationMap;
 import com.isums.houseservice.domains.emuns.AccessStatus;
 import com.isums.houseservice.domains.emuns.HouseMemberRole;
 import com.isums.houseservice.domains.entities.*;
@@ -19,12 +20,12 @@ import common.paginations.cache.CachedPageService;
 import common.paginations.converters.SpringPageConverter;
 import common.paginations.dtos.PageRequest;
 import common.paginations.dtos.PageResponse;
-import common.paginations.specifications.SpecificationBuilder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
@@ -37,6 +38,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -76,18 +78,18 @@ public class HouseServiceImpl implements HouseService {
 
         House house = House.builder()
                 .name(req.name())
-                .nameTranslations(translationAutoFillService.complete(req.name()))
+                .nameTranslations(translationAutoFillService.complete(req.name(), req.nameTranslations()))
                 .address(req.address())
-                .addressTranslations(translationAutoFillService.complete(req.address()))
+                .addressTranslations(translationAutoFillService.complete(req.address(), req.addressTranslations()))
                 .ward(req.ward())
-                .wardTranslations(translationAutoFillService.complete(req.ward()))
+                .wardTranslations(translationAutoFillService.complete(req.ward(), req.wardTranslations()))
                 .region(region)
                 .commune(req.commune())
-                .communeTranslations(translationAutoFillService.complete(req.commune()))
+                .communeTranslations(translationAutoFillService.complete(req.commune(), req.communeTranslations()))
                 .city(req.city())
-                .cityTranslations(translationAutoFillService.complete(req.city()))
+                .cityTranslations(translationAutoFillService.complete(req.city(), req.cityTranslations()))
                 .description(req.description())
-                .descriptionTranslations(translationAutoFillService.complete(req.description()))
+                .descriptionTranslations(translationAutoFillService.complete(req.description(), req.descriptionTranslations()))
                 .numberOfFloors(req.numberOfFloors())
                 .paymentRestricted(false)
                 .status(HouseStatus.AVAILABLE)
@@ -148,7 +150,13 @@ public class HouseServiceImpl implements HouseService {
                     dto.description(),
                     dto.status(),
                     functionalAreas,
-                    getHouseImages(id)
+                    getHouseImages(id),
+                    dto.nameTranslations(),
+                    dto.addressTranslations(),
+                    dto.wardTranslations(),
+                    dto.communeTranslations(),
+                    dto.cityTranslations(),
+                    dto.descriptionTranslations()
             );
         } catch (Exception ex) {
             throw new RuntimeException("Fail to get house by id: " + ex.getMessage());
@@ -309,6 +317,60 @@ public class HouseServiceImpl implements HouseService {
             }).toList();
         }
 
+    @Override
+    @Transactional
+    public HouseDto updateHouseTranslations(UUID houseId, UpdateHouseTranslationsRequest request) {
+        House house = houseRepository.findById(houseId)
+                .orElseThrow(() -> new NotFoundException("House not found: " + houseId));
+
+        house.setNameTranslations(mergeTranslations(house.getNameTranslations(), request.nameTranslations()));
+        house.setAddressTranslations(mergeTranslations(house.getAddressTranslations(), request.addressTranslations()));
+        house.setWardTranslations(mergeTranslations(house.getWardTranslations(), request.wardTranslations()));
+        house.setCommuneTranslations(mergeTranslations(house.getCommuneTranslations(), request.communeTranslations()));
+        house.setCityTranslations(mergeTranslations(house.getCityTranslations(), request.cityTranslations()));
+        house.setDescriptionTranslations(mergeTranslations(house.getDescriptionTranslations(), request.descriptionTranslations()));
+
+        if (request.nameTranslations() != null && request.nameTranslations().get("vi") != null) {
+            house.setName(request.nameTranslations().get("vi"));
+        }
+        if (request.addressTranslations() != null && request.addressTranslations().get("vi") != null) {
+            house.setAddress(request.addressTranslations().get("vi"));
+        }
+        if (request.wardTranslations() != null && request.wardTranslations().get("vi") != null) {
+            house.setWard(request.wardTranslations().get("vi"));
+        }
+        if (request.communeTranslations() != null && request.communeTranslations().get("vi") != null) {
+            house.setCommune(request.communeTranslations().get("vi"));
+        }
+        if (request.cityTranslations() != null && request.cityTranslations().get("vi") != null) {
+            house.setCity(request.cityTranslations().get("vi"));
+        }
+        if (request.descriptionTranslations() != null && request.descriptionTranslations().get("vi") != null) {
+            house.setDescription(request.descriptionTranslations().get("vi"));
+        }
+
+        house.setUpdatedAt(Instant.now());
+        House saved = houseRepository.save(house);
+        cachedPageService.evictAll(PAGE_NS);
+        return houseMapper.toDto(saved);
+    }
+
+    private TranslationMap mergeTranslations(TranslationMap existing, Map<String, String> patch) {
+        if (patch == null || patch.isEmpty()) {
+            return existing;
+        }
+        Map<String, String> merged = new java.util.LinkedHashMap<>();
+        if (existing != null && existing.getTranslations() != null) {
+            merged.putAll(existing.getTranslations());
+        }
+        for (Map.Entry<String, String> entry : patch.entrySet()) {
+            if (entry.getKey() == null || entry.getKey().isBlank()) continue;
+            if (entry.getValue() == null || entry.getValue().isBlank()) continue;
+            merged.put(entry.getKey().trim().toLowerCase(java.util.Locale.ROOT), entry.getValue().trim());
+        }
+        return TranslationMap.of(merged);
+    }
+
     private String resolveLocalized(String source, common.i18n.TranslationMap translations) {
         if (translations == null || translations.getTranslations().isEmpty()) {
             return source;
@@ -438,12 +500,47 @@ public class HouseServiceImpl implements HouseService {
         String houseIdRaw = request.<String>filterValue("houseId").orElse(null);
         UUID houseIdFilter = houseIdRaw != null ? UUID.fromString(houseIdRaw) : null;
 
-        var spec = SpecificationBuilder.<House>create()
-                .keywordLike(request.keyword(), "name", "address")
-                .enumEq("status", statusFilter)
-                .enumInRaw("status", statusesRaw, HouseStatus.class)
-                .eq("houseId", houseIdFilter)
-                .build();
+        List<HouseStatus> statusFilters = statusesRaw == null || statusesRaw.isBlank()
+                ? List.of()
+                : Arrays.stream(statusesRaw.split(","))
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .map(String::toUpperCase)
+                .map(value -> {
+                    try {
+                        return HouseStatus.valueOf(value);
+                    } catch (IllegalArgumentException ex) {
+                        return null;
+                    }
+                })
+                .filter(java.util.Objects::nonNull)
+                .toList();
+
+        Specification<House> spec = (root, query, criteriaBuilder) -> {
+            List<jakarta.persistence.criteria.Predicate> predicates = new ArrayList<>();
+
+            if (request.hasKeyword()) {
+                String keyword = "%" + request.keyword().trim().toLowerCase() + "%";
+                predicates.add(criteriaBuilder.or(
+                        criteriaBuilder.like(criteriaBuilder.lower(root.get("name")), keyword),
+                        criteriaBuilder.like(criteriaBuilder.lower(root.get("address")), keyword)
+                ));
+            }
+
+            if (statusFilter != null) {
+                predicates.add(criteriaBuilder.equal(root.get("status"), statusFilter));
+            }
+
+            if (!statusFilters.isEmpty()) {
+                predicates.add(root.get("status").in(statusFilters));
+            }
+
+            if (houseIdFilter != null) {
+                predicates.add(criteriaBuilder.equal(root.get("id"), houseIdFilter));
+            }
+
+            return criteriaBuilder.and(predicates.toArray(jakarta.persistence.criteria.Predicate[]::new));
+        };
 
         var pageable = SpringPageConverter.toPageable(request);
 
@@ -471,7 +568,13 @@ public class HouseServiceImpl implements HouseService {
                                 dto.description(),
                                 dto.status(),
                                 dto.functionalAreas(),
-                                images
+                                images,
+                                dto.nameTranslations(),
+                                dto.addressTranslations(),
+                                dto.wardTranslations(),
+                                dto.communeTranslations(),
+                                dto.cityTranslations(),
+                                dto.descriptionTranslations()
                         );
                     })
                     .toList();

@@ -38,6 +38,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -81,7 +82,9 @@ class HouseControllerTest {
     private HouseDto houseDto(UUID id) {
         return new HouseDto(id, UUID.randomUUID(), UUID.randomUUID(), "H1",
                 "addr", "ward", "commune", "city", 1, false, "desc",
-                HouseStatus.AVAILABLE, List.of(), List.of());
+                HouseStatus.AVAILABLE, List.of(), List.of(),
+                java.util.Map.of(), java.util.Map.of(), java.util.Map.of(),
+                java.util.Map.of(), java.util.Map.of(), java.util.Map.of());
     }
 
     @Test
@@ -95,6 +98,16 @@ class HouseControllerTest {
         mvc.perform(get("/api/houses"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[0].name").value("H1"));
+    }
+
+    @Test
+    @DisplayName("GET / returns 400 when page is less than 1")
+    void getAll_invalidPage_returnsBadRequest() throws Exception {
+        mvc.perform(get("/api/houses").param("page", "0"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].code").value("BAD_REQUEST"));
+
+        verifyNoInteractions(houseService);
     }
 
     @Test
