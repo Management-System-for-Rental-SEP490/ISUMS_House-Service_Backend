@@ -207,15 +207,30 @@ public class HouseGrpcImpl extends HouseServiceGrpc.HouseServiceImplBase {
             }
 
             UUID managerId = UUID.fromString(userId);
-            List<Region> regions = regionRepository.findAllByManagerId(managerId);
 
-            ListHouseResponse.Builder res = ListHouseResponse.newBuilder();
-            for (Region region : regions) {
-                List<House> houses = houseRepository.findAllByRegionId(region.getId());
-                for (House house : houses) {
-                    res.addHouse(houseGrpcMapper.toHouseResponse(house));
+            java.util.Set<UUID> regionIds = new java.util.LinkedHashSet<>();
+            for (Region r : regionRepository.findAllByManagerId(managerId)) {
+                regionIds.add(r.getId());
+            }
+            for (var rs : regionStaffRepository.findAllByIdStaffId(managerId)) {
+                if (rs.getId() != null && rs.getId().getRegionId() != null) {
+                    regionIds.add(rs.getId().getRegionId());
                 }
             }
+
+            ListHouseResponse.Builder res = ListHouseResponse.newBuilder();
+            java.util.Set<UUID> seen = new java.util.HashSet<>();
+            for (UUID regionId : regionIds) {
+                List<House> houses = houseRepository.findAllByRegionId(regionId);
+                for (House house : houses) {
+                    if (house.getId() != null && seen.add(house.getId())) {
+                        res.addHouse(houseGrpcMapper.toHouseResponse(house));
+                    }
+                }
+            }
+
+            log.info("[getHousesByManagerRegion] managerId={} regions={} houses={}",
+                    managerId, regionIds.size(), seen.size());
 
             responseObserver.onNext(res.build());
             responseObserver.onCompleted();

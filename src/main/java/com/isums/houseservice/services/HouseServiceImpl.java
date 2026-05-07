@@ -25,6 +25,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.data.domain.Page;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -185,6 +186,10 @@ public class HouseServiceImpl implements HouseService {
 
     @Override
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "houseImages", key = "#houseId"),
+            @CacheEvict(value = "user-house-access", allEntries = true)
+    })
     public void uploadHouseImages(UUID houseId, List<MultipartFile> files) {
         boolean isExist = houseRepository.existsById(houseId);
         if (!isExist) {
@@ -203,6 +208,7 @@ public class HouseServiceImpl implements HouseService {
 
             houseImageRepository.save(image);
         });
+        cachedPageService.evictAll(PAGE_NS);
     }
 
     private List<HouseImageDto> getHouseImages(UUID houseId) {
@@ -218,17 +224,25 @@ public class HouseServiceImpl implements HouseService {
     }
 
     @Override
-    @CacheEvict(value = "houseImages", key = "#houseId", allEntries = true)
+    @Caching(evict = {
+            @CacheEvict(value = "houseImages", key = "#houseId"),
+            @CacheEvict(value = "user-house-access", allEntries = true)
+    })
     public void deleteHouseImage(UUID houseId, UUID imageId) {
         HouseImage image = houseImageRepository.findById(imageId)
                 .orElseThrow(() -> new NotFoundException("House image not found"));
         s3.delete(image.getKey());
         houseImageRepository.delete(image);
+        cachedPageService.evictAll(PAGE_NS);
     }
 
     @Override
     @Transactional
-    @CacheEvict(value = "user-house-access", allEntries = true)
+    @Caching(evict = {
+            @CacheEvict(value = "user-house-access", allEntries = true),
+            @CacheEvict(value = "marketplace-bookable", allEntries = true),
+            @CacheEvict(value = "marketplace-locked", allEntries = true)
+    })
     public void activeHouseForUser(UUID userId, UUID houseId, Instant handoverDate) {
         House house = houseRepository.findById(houseId).orElseThrow(() -> new NotFoundException("House not found: " + houseId));
 
@@ -240,6 +254,7 @@ public class HouseServiceImpl implements HouseService {
             house.setNextHandoverDate(null);
             house.setUpdatedAt(Instant.now());
             houseRepository.save(house);
+            cachedPageService.evictAll(PAGE_NS);
             log.info("[House] Re-activated existing tenant userId={} houseId={} handoverDate={}",
                     userId, houseId, handoverDate);
             return;
@@ -254,6 +269,7 @@ public class HouseServiceImpl implements HouseService {
             house.setNextTenantId(userId);
             house.setNextHandoverDate(handoverDate);
             houseRepository.save(house);
+            cachedPageService.evictAll(PAGE_NS);
 
             createPendingTenantGroup(userId, houseId);
 
@@ -347,6 +363,7 @@ public class HouseServiceImpl implements HouseService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "user-house-access", allEntries = true)
     public HouseDto updateHouseTranslations(UUID houseId, UpdateHouseTranslationsRequest request) {
         House house = houseRepository.findById(houseId)
                 .orElseThrow(() -> new NotFoundException("House not found: " + houseId));
@@ -414,11 +431,23 @@ public class HouseServiceImpl implements HouseService {
         House house = houseRepository.findById(houseId)
                 .orElseThrow(() -> new NotFoundException("House not found: " + houseId));
 
-        if (!tenantId.equals(house.getUserRentalId())) {
+        if (house.getUserRentalId() != null && !tenantId.equals(house.getUserRentalId())) {
             log.warn("[House] deactivateHouseForUser tenantId={} does not match userRentalId={} houseId={}",
                     tenantId, house.getUserRentalId(), houseId);
             return;
         }
+
+        tenantGroupRepository.findByHouseIdAndIsActiveTrue(houseId).ifPresent(group -> {
+            for (TenantMember m : tenantMemberRepository.findByTenantGroupId(group.getId())) {
+                if (m.isActive()) {
+                    m.setActive(false);
+                    tenantMemberRepository.save(m);
+                }
+            }
+            group.setActive(false);
+            tenantGroupRepository.save(group);
+            log.info("[House] Deactivated tenantGroupId={} houseId={}", group.getId(), houseId);
+        });
 
         house.setUserRentalId(null);
         house.setTenantGroupId(null);
@@ -523,6 +552,7 @@ public class HouseServiceImpl implements HouseService {
         house.setPaymentRestricted(restricted);
         house.setUpdatedAt(Instant.now());
         houseRepository.save(house);
+        cachedPageService.evictAll(PAGE_NS);
 
         log.info("[House] PaymentRestricted={} houseId={} tenantId={}",
                 restricted, houseId, tenantId);
@@ -587,6 +617,7 @@ public class HouseServiceImpl implements HouseService {
         house.setNextHandoverDate(null);
         house.setStatus(HouseStatus.RENTED);
         houseRepository.save(house);
+        cachedPageService.evictAll(PAGE_NS);
 
         log.info("[House] Activated houseId={} ownerId={}", house.getId(), userId);
     }
