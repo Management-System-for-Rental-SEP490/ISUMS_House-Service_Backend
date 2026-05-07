@@ -7,5 +7,7 @@ public enum AccessStatus {
 
     PENDING_DEPOSIT,
 
-    PENDING_FIRST_RENT
+    PENDING_FIRST_RENT,
+
+    PAYMENT_RESTRICTED
 }

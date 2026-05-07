@@ -20,12 +20,12 @@ public class TenantTransitionScheduler {
     private final HouseRepository houseRepository;
     private final HouseService houseService;
 
-    @Scheduled(cron = "0 0 0 * * *", zone = "Asia/Ho_Chi_Minh")
+    @Scheduled(cron = "0 5 * * * *", zone = "Asia/Ho_Chi_Minh")
     @Transactional
     public void processHandovers() {
         Instant now = Instant.now();
 
-        List<House> pending = houseRepository.findByNextTenantIdIsNotNullAndNextHandoverDateBefore(now);
+        List<House> pending = houseRepository.findPendingHandoversDue(now);
 
         for (House house : pending) {
             try {

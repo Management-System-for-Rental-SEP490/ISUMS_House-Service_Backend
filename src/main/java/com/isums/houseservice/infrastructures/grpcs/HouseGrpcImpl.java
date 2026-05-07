@@ -3,7 +3,10 @@ package com.isums.houseservice.infrastructures.grpcs;
 import com.isums.houseservice.domains.entities.House;
 import com.isums.houseservice.infrastructures.mappers.HouseGrpcMapper;
 import com.isums.houseservice.grpc.*;
+import com.isums.houseservice.grpc.GetAllHousesRequest;
 import com.isums.houseservice.infrastructures.repositories.HouseRepository;
+import com.isums.houseservice.domains.entities.Region;
+import com.isums.houseservice.infrastructures.repositories.RegionRepository;
 import com.isums.houseservice.infrastructures.repositories.RegionStaffRepository;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
@@ -23,6 +26,7 @@ import java.util.UUID;
 public class HouseGrpcImpl extends HouseServiceGrpc.HouseServiceImplBase {
     private final HouseRepository houseRepository;
     private final RegionStaffRepository regionStaffRepository;
+    private final RegionRepository regionRepository;
     private final HouseGrpcMapper houseGrpcMapper;
 
     @Override
@@ -79,8 +83,14 @@ public class HouseGrpcImpl extends HouseServiceGrpc.HouseServiceImplBase {
                             .withDescription("Region not found for house")
                             .asRuntimeException());
 
+            Region region = regionRepository.findById(regionId)
+                    .orElseThrow(() -> Status.NOT_FOUND
+                            .withDescription("Region not found for house")
+                            .asRuntimeException());
+
             GetRegionResponse res = GetRegionResponse.newBuilder()
                     .setRegionId(regionId.toString())
+                    .setManagerId(region.getManagerId() != null ? region.getManagerId().toString() : "")
                     .build();
 
             responseObserver.onNext(res);
@@ -160,4 +170,79 @@ public class HouseGrpcImpl extends HouseServiceGrpc.HouseServiceImplBase {
             );
         }
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public void getAllHouses(GetAllHousesRequest request, StreamObserver<ListHouseResponse> responseObserver) {
+        try {
+            List<House> houses = houseRepository.findAll();
+            ListHouseResponse.Builder res = ListHouseResponse.newBuilder();
+            for (House house : houses) {
+                res.addHouse(houseGrpcMapper.toHouseResponse(house));
+            }
+            log.info("[HouseGrpc] getAllHouses returned {} houses", houses.size());
+            responseObserver.onNext(res.build());
+            responseObserver.onCompleted();
+        } catch (DataAccessException dae) {
+            log.error("DB error in getAllHouses", dae);
+            responseObserver.onError(
+                    Status.UNAVAILABLE.withDescription("Database unavailable").withCause(dae).asRuntimeException()
+            );
+        } catch (Exception ex) {
+            log.error("Unexpected error in getAllHouses", ex);
+            responseObserver.onError(
+                    Status.INTERNAL.withDescription("Internal server error").withCause(ex).asRuntimeException()
+            );
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public void getHousesByManagerRegion(GetHouseByUserRequest request, StreamObserver<ListHouseResponse> responseObserver) {
+        try {
+            String userId = request.getUserId().trim();
+            if (userId.isBlank()) {
+                responseObserver.onError(Status.INVALID_ARGUMENT.withDescription("userId is required").asRuntimeException());
+                return;
+            }
+
+            UUID managerId = UUID.fromString(userId);
+
+            java.util.Set<UUID> regionIds = new java.util.LinkedHashSet<>();
+            for (Region r : regionRepository.findAllByManagerId(managerId)) {
+                regionIds.add(r.getId());
+            }
+            for (var rs : regionStaffRepository.findAllByIdStaffId(managerId)) {
+                if (rs.getId() != null && rs.getId().getRegionId() != null) {
+                    regionIds.add(rs.getId().getRegionId());
+                }
+            }
+
+            ListHouseResponse.Builder res = ListHouseResponse.newBuilder();
+            java.util.Set<UUID> seen = new java.util.HashSet<>();
+            for (UUID regionId : regionIds) {
+                List<House> houses = houseRepository.findAllByRegionId(regionId);
+                for (House house : houses) {
+                    if (house.getId() != null && seen.add(house.getId())) {
+                        res.addHouse(houseGrpcMapper.toHouseResponse(house));
+                    }
+                }
+            }
+
+            log.info("[getHousesByManagerRegion] managerId={} regions={} houses={}",
+                    managerId, regionIds.size(), seen.size());
+
+            responseObserver.onNext(res.build());
+            responseObserver.onCompleted();
+        } catch (IllegalArgumentException e) {
+            responseObserver.onError(Status.INVALID_ARGUMENT.withDescription("Invalid managerId UUID").asRuntimeException());
+        } catch (DataAccessException dae) {
+            log.error("DB error in getHousesByManagerRegion", dae);
+            responseObserver.onError(Status.UNAVAILABLE.withDescription("Database unavailable").withCause(dae).asRuntimeException());
+        } catch (Exception ex) {
+            log.error("Unexpected error in getHousesByManagerRegion", ex);
+            responseObserver.onError(Status.INTERNAL.withDescription("Internal server error").withCause(ex).asRuntimeException());
+        }
+    }
 }
+

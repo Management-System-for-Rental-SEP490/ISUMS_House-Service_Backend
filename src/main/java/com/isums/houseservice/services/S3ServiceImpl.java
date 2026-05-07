@@ -3,15 +3,17 @@ package com.isums.houseservice.services;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.UUID;
 
 @Service
@@ -19,18 +21,18 @@ import java.util.UUID;
 @Slf4j
 public class S3ServiceImpl {
 
+    private static final int DEFAULT_PRESIGN_TTL_MINUTES = 60;
+
     private final S3Client s3Client;
+    private final S3Presigner s3Presigner;
 
     @Value("${app.s3.bucket}")
     private String bucket;
 
-    @Value("${app.s3.cloudfront-domain}")
-    private String cloudFrontDomain;
-
     public String upload(MultipartFile file, String folder) {
         try {
             String ext = getExtension(file.getOriginalFilename());
-            String key = "media/" + "folder" + "/" + UUID.randomUUID() + "." + ext;
+            String key = "media/" + folder + "/" + UUID.randomUUID() + "." + ext;
 
             s3Client.putObject(PutObjectRequest.builder()
                     .bucket(bucket)
@@ -61,7 +63,17 @@ public class S3ServiceImpl {
     }
 
     public String getImageUrl(String key) {
-        return "https://" + cloudFrontDomain + "/" + key;
+        return presignedUrl(key, DEFAULT_PRESIGN_TTL_MINUTES);
+    }
+
+    public String presignedUrl(String key, int ttlMinutes) {
+        if (key == null || key.isBlank()) return null;
+        if (key.matches("(?i)^https?://.*")) return key;
+        GetObjectPresignRequest req = GetObjectPresignRequest.builder()
+                .signatureDuration(Duration.ofMinutes(ttlMinutes))
+                .getObjectRequest(r -> r.bucket(bucket).key(key))
+                .build();
+        return s3Presigner.presignGetObject(req).url().toString();
     }
 
     private String getExtension(String fileName) {

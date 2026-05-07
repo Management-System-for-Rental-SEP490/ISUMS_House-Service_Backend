@@ -1,7 +1,12 @@
 package com.isums.houseservice.domains.entities;
 
+import common.i18n.TranslationMap;
+import common.i18n.TranslationMapConverter;
 import com.isums.houseservice.domains.emuns.HouseStatus;
+import com.isums.houseservice.domains.emuns.HouseStructure;
 import jakarta.persistence.*;
+
+import java.math.BigDecimal;
 import lombok.*;
 import org.hibernate.annotations.UuidGenerator;
 
@@ -32,17 +37,67 @@ public class House {
     @Column(columnDefinition = "text")
     private String name;
 
+    @Column(name = "name_translations", columnDefinition = "text")
+    @Convert(converter = TranslationMapConverter.class)
+    private TranslationMap nameTranslations;
+
     @Column(columnDefinition = "text")
     private String address;
+
+    @Column(name = "address_translations", columnDefinition = "text")
+    @Convert(converter = TranslationMapConverter.class)
+    private TranslationMap addressTranslations;
+
+    @Column(columnDefinition = "text")
+    private String ward;
+
+    @Column(name = "ward_translations", columnDefinition = "text")
+    @Convert(converter = TranslationMapConverter.class)
+    private TranslationMap wardTranslations;
 
     @Column(columnDefinition = "text")
     private String commune;
 
+    @Column(name = "commune_translations", columnDefinition = "text")
+    @Convert(converter = TranslationMapConverter.class)
+    private TranslationMap communeTranslations;
+
     @Column(columnDefinition = "text")
     private String city;
 
+    @Column(name = "city_translations", columnDefinition = "text")
+    @Convert(converter = TranslationMapConverter.class)
+    private TranslationMap cityTranslations;
+
     @Column(columnDefinition = "text")
     private String description;
+
+    @Column(name = "description_translations", columnDefinition = "text")
+    @Convert(converter = TranslationMapConverter.class)
+    private TranslationMap descriptionTranslations;
+
+    @Column(name = "number_of_floors")
+    private Integer numberOfFloors;
+
+    @Column(name = "area_m2", precision = 10, scale = 2)
+    private BigDecimal areaM2;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "structure", length = 32)
+    private HouseStructure structure;
+
+    @Column(name = "land_cert_number", length = 128)
+    private String landCertNumber;
+
+    @Column(name = "land_cert_issue_date")
+    private java.time.LocalDate landCertIssueDate;
+
+    @Column(name = "land_cert_issuer")
+    private String landCertIssuer;
+
+    @Column(name = "payment_restricted")
+    @Builder.Default
+    private Boolean paymentRestricted = false;
 
     @Column(name = "handover_date")
     private Instant handoverDate;
@@ -59,11 +114,13 @@ public class House {
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     @OneToMany(mappedBy = "house", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
     private List<FunctionalArea> functionalAreas = new java.util.ArrayList<>();
 
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     @OneToMany(mappedBy = "house", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
     private List<HouseImage> houseImages = new ArrayList<>();
 
     private Instant createdAt;
@@ -73,6 +130,7 @@ public class House {
     @OneToMany(mappedBy = "house")
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
+    @Builder.Default
     private List<InstalledDevice> devices = new ArrayList<>();
 
     @ManyToOne
@@ -89,3 +147,4 @@ public class House {
         area.setHouse(null);
     }
 }
+

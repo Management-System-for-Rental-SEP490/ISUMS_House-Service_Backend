@@ -3,6 +3,7 @@ package com.isums.houseservice.infrastructures.repositories;
 import com.isums.houseservice.domains.entities.House;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 
 import java.time.Instant;
@@ -10,7 +11,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface HouseRepository extends JpaRepository<House, UUID> {
+public interface HouseRepository extends JpaRepository<House, UUID>, JpaSpecificationExecutor<House> {
 
     @EntityGraph(attributePaths = "functionalAreas")
     Optional<House> findWithFunctionalAreasById(UUID id);
@@ -31,7 +32,12 @@ public interface HouseRepository extends JpaRepository<House, UUID> {
             """)
     List<House> findByTenantGroupMemberUserId(UUID userId);
 
-    List<House> findByNextTenantIdIsNotNullAndNextHandoverDateBefore(Instant now);
+    @Query("""
+    SELECT h FROM House h
+    WHERE h.nextTenantId IS NOT NULL
+    AND h.nextHandoverDate <= :now
+""")
+    List<House> findPendingHandoversDue(Instant now);
 
     @Query("""
     SELECT h FROM House h
