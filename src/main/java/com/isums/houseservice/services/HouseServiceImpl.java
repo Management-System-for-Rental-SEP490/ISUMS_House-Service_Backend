@@ -13,6 +13,7 @@ import com.isums.houseservice.domains.emuns.HouseStatus;
 import com.isums.houseservice.infrastructures.grpcs.PaymentGrpcClient;
 import com.isums.houseservice.infrastructures.grpcs.UserClientsGrpc;
 import com.isums.houseservice.infrastructures.kafkas.HouseEventProducer;
+import com.isums.houseservice.infrastructures.kafkas.HouseSubscriptionNotifier;
 import com.isums.houseservice.infrastructures.mappers.HouseMapper;
 import com.isums.houseservice.infrastructures.repositories.*;
 import com.isums.userservice.grpc.UserResponse;
@@ -54,6 +55,8 @@ public class HouseServiceImpl implements HouseService {
     private final HouseMapper houseMapper;
     private final RegionRepository regionRepository;
     private final HouseEventProducer houseEventProducer;
+    private final HouseSubscriptionNotifier subscriptionNotifier;
+    private final HouseSubscriptionRepository subscriptionRepository;
     private final S3ServiceImpl s3;
     private final HouseImageRepository houseImageRepository;
     private final UserClientsGrpc userClientsGrpc;
@@ -146,6 +149,11 @@ public class HouseServiceImpl implements HouseService {
                     dto.commune(),
                     dto.city(),
                     dto.numberOfFloors(),
+                    dto.areaM2(),
+                    dto.structure(),
+                    dto.landCertNumber(),
+                    dto.landCertIssueDate(),
+                    dto.landCertIssuer(),
                     dto.paymentRestricted(),
                     dto.description(),
                     dto.status(),
@@ -220,8 +228,22 @@ public class HouseServiceImpl implements HouseService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "user-house-access", allEntries = true)
     public void activeHouseForUser(UUID userId, UUID houseId, Instant handoverDate) {
         House house = houseRepository.findById(houseId).orElseThrow(() -> new NotFoundException("House not found: " + houseId));
+
+        if (userId.equals(house.getUserRentalId())) {
+            if (handoverDate != null) {
+                house.setHandoverDate(handoverDate);
+            }
+            house.setNextTenantId(null);
+            house.setNextHandoverDate(null);
+            house.setUpdatedAt(Instant.now());
+            houseRepository.save(house);
+            log.info("[House] Re-activated existing tenant userId={} houseId={} handoverDate={}",
+                    userId, houseId, handoverDate);
+            return;
+        }
 
         boolean houseCurrentlyOccupied = house.getUserRentalId() != null
                 && house.getStatus() == HouseStatus.RENTED
@@ -259,21 +281,27 @@ public class HouseServiceImpl implements HouseService {
 
     @Override
     @Transactional(readOnly = true)
+    @Cacheable(value = "user-house-access", key = "#keycloakId")
     public List<HouseAccessStatus> getMyHouseAccess(String keycloakId) {
         UserResponse user = userClientsGrpc.getUserIdAndRoleByKeyCloakId(keycloakId);
         UUID userId = UUID.fromString(user.getId());
         List<House> houses = houseRepository.findAccessibleByUserId(userId);
 
-        return houses.stream().map(house -> {
-            Instant now = Instant.now();
+        Instant now = Instant.now();
+        java.util.Map<UUID, InvoiceStatusDto> invoiceByHouse = houses.parallelStream()
+                .collect(java.util.stream.Collectors.toConcurrentMap(
+                        House::getId,
+                        h -> paymentGrpcClient.getInvoiceStatus(h.getId(), userId)));
 
-            boolean isPendingNext = userId.equals(house.getNextTenantId());
+        return houses.stream().map(house -> {
+            boolean isPendingNext = userId.equals(house.getNextTenantId())
+                    && !userId.equals(house.getUserRentalId());
 
             HouseMemberRole role = userId.equals(house.getUserRentalId())
                     ? HouseMemberRole.OWNER
                     : HouseMemberRole.MEMBER;
 
-            InvoiceStatusDto invoiceStatus = paymentGrpcClient.getInvoiceStatus(house.getId(), userId);
+            InvoiceStatusDto invoiceStatus = invoiceByHouse.get(house.getId());
 
             AccessStatus status;
             String reason = null;
@@ -381,12 +409,13 @@ public class HouseServiceImpl implements HouseService {
 
     @Override
     @Transactional
-    public void deactivateHouseForUser(UUID tenantId, UUID houseId) {
+    @CacheEvict(value = "user-house-access", allEntries = true)
+    public void deactivateHouseForUser(UUID tenantId, UUID houseId, boolean keepUnavailable) {
         House house = houseRepository.findById(houseId)
                 .orElseThrow(() -> new NotFoundException("House not found: " + houseId));
 
         if (!tenantId.equals(house.getUserRentalId())) {
-            log.warn("[House] deactivateHouseForUser tenantId={} không khớp userRentalId={} houseId={}",
+            log.warn("[House] deactivateHouseForUser tenantId={} does not match userRentalId={} houseId={}",
                     tenantId, house.getUserRentalId(), houseId);
             return;
         }
@@ -394,21 +423,99 @@ public class HouseServiceImpl implements HouseService {
         house.setUserRentalId(null);
         house.setTenantGroupId(null);
         house.setHandoverDate(null);
-        house.setStatus(HouseStatus.AVAILABLE);
+        house.setStatus(keepUnavailable ? HouseStatus.REPAIRED : HouseStatus.AVAILABLE);
         house.setUpdatedAt(Instant.now());
         houseRepository.save(house);
+        cachedPageService.evictAll(PAGE_NS);
 
-        log.info("[House] Deactivated houseId={} tenantId={}", houseId, tenantId);
+        log.info("[House] Deactivated houseId={} tenantId={} status={}",
+                houseId, tenantId, house.getStatus());
+
+        if (house.getStatus() == HouseStatus.AVAILABLE) {
+            subscriptionNotifier.notifyAvailable(house);
+        }
     }
 
     @Override
     @Transactional
+    @CacheEvict(value = "user-house-access", allEntries = true)
+    public HouseDto updateHouseStatus(UUID id, HouseStatus nextStatus, UUID actorId) {
+        if (nextStatus == null) {
+            throw new IllegalArgumentException("Status is required");
+        }
+        House house = houseRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("House not found: " + id));
+
+        HouseStatus current = house.getStatus();
+        if (current == nextStatus) {
+            return houseMapper.toDto(house);
+        }
+        if (current == HouseStatus.RENTED || nextStatus == HouseStatus.RENTED) {
+            throw new IllegalStateException(
+                    "RENTED status is driven by tenant lifecycle; manual transition is not allowed.");
+        }
+
+        house.setStatus(nextStatus);
+        house.setUpdatedAt(Instant.now());
+        House saved = houseRepository.save(house);
+        cachedPageService.evictAll(PAGE_NS);
+
+        log.info("[House] Status updated houseId={} {} -> {} actor={}",
+                id, current, nextStatus, actorId);
+
+        if (nextStatus == HouseStatus.AVAILABLE) {
+            subscriptionNotifier.notifyAvailable(saved);
+        }
+        return houseMapper.toDto(saved);
+    }
+
+    @Override
+    @Transactional
+    public void subscribeToAvailability(UUID houseId, String keycloakId) {
+        UserResponse user = userClientsGrpc.getUserIdAndRoleByKeyCloakId(keycloakId);
+        UUID userId = UUID.fromString(user.getId());
+        if (subscriptionRepository.existsByUserIdAndHouseId(userId, houseId)) {
+            return;
+        }
+        if (!houseRepository.existsById(houseId)) {
+            throw new NotFoundException("House not found: " + houseId);
+        }
+        subscriptionRepository.save(HouseSubscription.builder()
+                .userId(userId)
+                .houseId(houseId)
+                .userEmail(user.getEmail())
+                .build());
+        log.info("[Subscription] userId={} subscribed houseId={}", userId, houseId);
+    }
+
+    @Override
+    @Transactional
+    public void unsubscribeFromAvailability(UUID houseId, String keycloakId) {
+        UserResponse user = userClientsGrpc.getUserIdAndRoleByKeyCloakId(keycloakId);
+        UUID userId = UUID.fromString(user.getId());
+        int deleted = subscriptionRepository.deleteByUserIdAndHouseId(userId, houseId);
+        if (deleted > 0) {
+            log.info("[Subscription] userId={} unsubscribed houseId={}", userId, houseId);
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean isSubscribed(UUID houseId, String keycloakId) {
+        UserResponse user = userClientsGrpc.getUserIdAndRoleByKeyCloakId(keycloakId);
+        UUID userId = UUID.fromString(user.getId());
+        return subscriptionRepository.existsByUserIdAndHouseId(userId, houseId);
+    }
+
+    @Override
+    @Transactional
+    @CacheEvict(value = "user-house-access", allEntries = true)
     public void setTenantAccessRestriction(UUID tenantId, UUID houseId, boolean restricted) {
         House house = houseRepository.findById(houseId)
                 .orElseThrow(() -> new NotFoundException("House not found: " + houseId));
 
         if (!tenantId.equals(house.getUserRentalId())) {
-            log.warn("[House] setTenantAccessRestriction tenantId={} không phải tenant của houseId={}",
+            log.warn("[House] setTenantAccessRestriction tenantId={} is not a tenant of houseId={}",
                     tenantId, houseId);
             return;
         }
@@ -564,6 +671,11 @@ public class HouseServiceImpl implements HouseService {
                                 dto.commune(),
                                 dto.city(),
                                 dto.numberOfFloors(),
+                                dto.areaM2(),
+                                dto.structure(),
+                                dto.landCertNumber(),
+                                dto.landCertIssueDate(),
+                                dto.landCertIssuer(),
                                 dto.paymentRestricted(),
                                 dto.description(),
                                 dto.status(),
@@ -678,7 +790,7 @@ public class HouseServiceImpl implements HouseService {
                 "MAINTENANCE",
                 "PERIODIC_MAINTENANCE",
                 job.status(),
-                "Bảo trì định kỳ",
+                "Periodic maintenance",
                 null,
                 null,
                 null,
@@ -692,9 +804,9 @@ public class HouseServiceImpl implements HouseService {
 
     private HouseHistoryItemDto toHistoryItem(HouseHistoryRestClient.InspectionItemDto inspection) {
         String title = switch (String.valueOf(inspection.type())) {
-            case "CHECK_IN" -> "Kiểm tra check-in";
-            case "CHECK_OUT" -> "Kiểm tra check-out";
-            default -> "Kiểm tra nhà";
+            case "CHECK_IN" -> "Check-in inspection";
+            case "CHECK_OUT" -> "Check-out inspection";
+            default -> "House inspection";
         };
         return new HouseHistoryItemDto(
                 inspection.id(),
@@ -711,6 +823,40 @@ public class HouseServiceImpl implements HouseService {
                 inspection.createdAt(),
                 inspection.updatedAt() != null ? inspection.updatedAt() : inspection.createdAt()
         );
+    }
+
+    @Override
+    @Transactional
+    public HouseDto updateHouse(UUID id, CreateHouseRequest req) {
+        House house = houseRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("House not found: " + id));
+        if (req.regionId() != null && (house.getRegion() == null || !req.regionId().equals(house.getRegion().getId()))) {
+            Region region = regionRepository.findById(req.regionId())
+                    .orElseThrow(() -> new RuntimeException("Region not found"));
+            house.setRegion(region);
+        }
+        if (req.name() != null)        house.setName(req.name());
+        if (req.address() != null)     house.setAddress(req.address());
+        if (req.ward() != null)        house.setWard(req.ward());
+        if (req.commune() != null)     house.setCommune(req.commune());
+        if (req.city() != null)        house.setCity(req.city());
+        if (req.description() != null) house.setDescription(req.description());
+        if (req.numberOfFloors() != null) house.setNumberOfFloors(req.numberOfFloors());
+        if (req.areaM2() != null)      house.setAreaM2(req.areaM2());
+        if (req.structure() != null)   house.setStructure(req.structure());
+        if (req.landCertNumber() != null)    house.setLandCertNumber(req.landCertNumber());
+        if (req.landCertIssueDate() != null) house.setLandCertIssueDate(req.landCertIssueDate());
+        if (req.landCertIssuer() != null)    house.setLandCertIssuer(req.landCertIssuer());
+        if (req.nameTranslations() != null)        house.setNameTranslations(translationAutoFillService.complete(req.name(), req.nameTranslations()));
+        if (req.addressTranslations() != null)     house.setAddressTranslations(translationAutoFillService.complete(req.address(), req.addressTranslations()));
+        if (req.wardTranslations() != null)        house.setWardTranslations(translationAutoFillService.complete(req.ward(), req.wardTranslations()));
+        if (req.communeTranslations() != null)     house.setCommuneTranslations(translationAutoFillService.complete(req.commune(), req.communeTranslations()));
+        if (req.cityTranslations() != null)        house.setCityTranslations(translationAutoFillService.complete(req.city(), req.cityTranslations()));
+        if (req.descriptionTranslations() != null) house.setDescriptionTranslations(translationAutoFillService.complete(req.description(), req.descriptionTranslations()));
+        house.setUpdatedAt(Instant.now());
+        House saved = houseRepository.save(house);
+        cachedPageService.evictAll(PAGE_NS);
+        return houseMapper.toDto(saved);
     }
 
     private HouseHistoryItemDto toHistoryItem(HouseHistoryRestClient.IssueTicketItemDto issue) {

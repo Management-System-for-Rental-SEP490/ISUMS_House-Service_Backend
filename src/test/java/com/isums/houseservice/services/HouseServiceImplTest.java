@@ -61,6 +61,7 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.*;
@@ -167,7 +168,9 @@ class HouseServiceImplTest {
                 houseId, null, regionId,
                 "Test House", "123 Street",
                 "Ward 1", "Test Commune", "Test City",
-                null, false, "Desc",
+                null,                              // numberOfFloors
+                null, null, null, null, null,      // areaM2, structure, landCert_*
+                false, "Desc",
                 HouseStatus.AVAILABLE, List.of(), List.of(),
                 Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of()
         );
@@ -187,7 +190,9 @@ class HouseServiceImplTest {
         void setUp() {
             req = new CreateHouseRequest(
                     "Test House", "123 Street", regionId,
-                    "Ward 1", "Test Commune", "Test City", "Desc", 3, List.of(),
+                    "Ward 1", "Test Commune", "Test City", "Desc", 3,
+                    null, null, null, null, null,   // areaM2, structure, landCert_*
+                    List.of(),
                     null, null, null, null, null, null
             );
         }
@@ -244,7 +249,9 @@ class HouseServiceImplTest {
         void createHouse_withManualOverrides_propagatesToService() {
             CreateHouseRequest reqWithOverrides = new CreateHouseRequest(
                     "Nhà Hiệu Q7", "123 NVL", regionId,
-                    "P.Tân Phong", "", "TP.HCM", "Nhà 3 tầng", 3, List.of(),
+                    "P.Tân Phong", "", "TP.HCM", "Nhà 3 tầng", 3,
+                    null, null, null, null, null,                   // areaM2, structure, landCert_*
+                    List.of(),
                     Map.of("en", "Hieu Mansion D7"),              // override EN only → AI fills JA
                     Map.of("en", "123 NVL addr", "ja", "123 NVL 住所"), // override EN + JA
                     null,                                          // all AI
@@ -275,7 +282,9 @@ class HouseServiceImplTest {
         void createHouse_persistedTranslationsContainOverrides() {
             CreateHouseRequest reqWithOverrides = new CreateHouseRequest(
                     "Nhà Hiệu Q7", "123 Street", regionId,
-                    "Ward 1", "Test Commune", "Test City", "Desc", 3, List.of(),
+                    "Ward 1", "Test Commune", "Test City", "Desc", 3,
+                    null, null, null, null, null,                   // areaM2, structure, landCert_*
+                    List.of(),
                     Map.of("en", "Hieu Mansion D7"),
                     null, null, null, null, null
             );
@@ -339,7 +348,9 @@ class HouseServiceImplTest {
                     houseId, null, regionId,
                     "Test House", "123 Street",
                     "Ward 1", "Test Commune", "Test City",
-                    null, false, "Desc",
+                    null,                              // numberOfFloors
+                    null, null, null, null, null,      // areaM2, structure, landCert_*
+                    false, "Desc",
                     HouseStatus.AVAILABLE,
                     List.of(
                             new FunctionalAreaDto(kitchenId, houseId, "Kitchen", AreaType.KITCHEN, "1", "desc", FuctionalAreaStatus.NORMAL, Instant.now(), Instant.now(), null),
@@ -1002,7 +1013,7 @@ class HouseServiceImplTest {
 
             given(houseRepository.findById(houseId)).willReturn(Optional.of(house));
 
-            houseService.deactivateHouseForUser(userId, houseId);
+            houseService.deactivateHouseForUser(userId, houseId, false);
 
             ArgumentCaptor<House> captor = ArgumentCaptor.forClass(House.class);
             verify(houseRepository).save(captor.capture());
@@ -1014,6 +1025,22 @@ class HouseServiceImplTest {
         }
 
         @Test
+        @DisplayName("should keep house unavailable (REPAIRED) when keepUnavailable=true")
+        void deactivateHouseForUser_keepUnavailable_setsRepaired() {
+            house.setUserRentalId(userId);
+            house.setStatus(HouseStatus.RENTED);
+            given(houseRepository.findById(houseId)).willReturn(Optional.of(house));
+
+            houseService.deactivateHouseForUser(userId, houseId, true);
+
+            ArgumentCaptor<House> captor = ArgumentCaptor.forClass(House.class);
+            verify(houseRepository).save(captor.capture());
+            House saved = captor.getValue();
+            assertThat(saved.getUserRentalId()).isNull();
+            assertThat(saved.getStatus()).isEqualTo(HouseStatus.REPAIRED);
+        }
+
+        @Test
         @DisplayName("should do nothing when tenantId does not match userRentalId")
         void deactivateHouseForUser_tenantMismatch_noSave() {
             house.setUserRentalId(UUID.randomUUID()); // different tenant
@@ -1021,7 +1048,7 @@ class HouseServiceImplTest {
 
             given(houseRepository.findById(houseId)).willReturn(Optional.of(house));
 
-            houseService.deactivateHouseForUser(userId, houseId);
+            houseService.deactivateHouseForUser(userId, houseId, false);
 
             verify(houseRepository, never()).save(any(House.class));
         }
@@ -1031,7 +1058,7 @@ class HouseServiceImplTest {
         void deactivateHouseForUser_houseNotFound_throwsNotFoundException() {
             given(houseRepository.findById(houseId)).willReturn(Optional.empty());
 
-            assertThatThrownBy(() -> houseService.deactivateHouseForUser(userId, houseId))
+            assertThatThrownBy(() -> houseService.deactivateHouseForUser(userId, houseId, false))
                     .isInstanceOf(NotFoundException.class)
                     .hasMessageContaining("House not found");
 
@@ -1171,7 +1198,7 @@ class HouseServiceImplTest {
 
             // Use doReturn to avoid generic type mismatch at compile time
             doReturn(expected).when(cachedPageService)
-                    .getOrLoad(eq("houses"), eq(request), any(), any());
+                    .getOrLoad(startsWith("houses"), eq(request), any(), any());
 
             PageResponse<HouseDto> result = houseService.getAll(request);
 
@@ -1197,7 +1224,7 @@ class HouseServiceImplTest {
 
             doAnswer(invocation -> invocation.<java.util.function.Supplier<PageResponse<HouseDto>>>getArgument(3).get())
                     .when(cachedPageService)
-                    .getOrLoad(eq("houses"), eq(request), any(), any());
+                    .getOrLoad(startsWith("houses"), eq(request), any(), any());
 
             given(houseRepository.findAll(specCaptor.capture(), any(Pageable.class)))
                     .willReturn(new PageImpl<>(List.of(house)));

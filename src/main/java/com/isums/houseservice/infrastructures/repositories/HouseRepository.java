@@ -32,7 +32,12 @@ public interface HouseRepository extends JpaRepository<House, UUID>, JpaSpecific
             """)
     List<House> findByTenantGroupMemberUserId(UUID userId);
 
-    List<House> findByNextTenantIdIsNotNullAndNextHandoverDateBefore(Instant now);
+    @Query("""
+    SELECT h FROM House h
+    WHERE h.nextTenantId IS NOT NULL
+    AND h.nextHandoverDate <= :now
+""")
+    List<House> findPendingHandoversDue(Instant now);
 
     @Query("""
     SELECT h FROM House h

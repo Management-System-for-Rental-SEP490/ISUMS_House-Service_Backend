@@ -102,7 +102,7 @@ class EContractEventConsumerTest {
 
             consumer.handleContractTerminated(rec, ack);
 
-            verify(houseService).deactivateHouseForUser(event.getTenantId(), event.getHouseId());
+            verify(houseService).deactivateHouseForUser(event.getTenantId(), event.getHouseId(), false);
             verify(ack).acknowledge();
         }
 

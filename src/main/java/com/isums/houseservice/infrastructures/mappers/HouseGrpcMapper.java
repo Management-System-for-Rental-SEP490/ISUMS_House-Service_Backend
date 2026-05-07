@@ -37,6 +37,21 @@ public class HouseGrpcMapper {
         if (house.getRegion() != null) {
             builder.setRegionId(uuidToString(house.getRegion().getId()));
         }
+        if (house.getAreaM2() != null) {
+            builder.setAreaM2(house.getAreaM2().toPlainString());
+        }
+        if (house.getStructure() != null) {
+            builder.setStructure(house.getStructure().name());
+        }
+        if (house.getLandCertNumber() != null) {
+            builder.setLandCertNumber(house.getLandCertNumber());
+        }
+        if (house.getLandCertIssueDate() != null) {
+            builder.setLandCertIssueDate(house.getLandCertIssueDate().toString());
+        }
+        if (house.getLandCertIssuer() != null) {
+            builder.setLandCertIssuer(house.getLandCertIssuer());
+        }
         return builder.build();
     }
 

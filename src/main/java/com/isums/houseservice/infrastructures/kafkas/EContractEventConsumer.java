@@ -1,5 +1,6 @@
 package com.isums.houseservice.infrastructures.kafkas;
 
+import com.isums.houseservice.domains.events.ContractReplacedEvent;
 import com.isums.houseservice.domains.events.ContractTerminatedEvent;
 import com.isums.houseservice.domains.events.MapUserToHouseEvent;
 import com.isums.houseservice.infrastructures.abstracts.HouseService;
@@ -41,13 +42,33 @@ public class EContractEventConsumer {
         try {
             ContractTerminatedEvent event = objectMapper.readValue(record.value(), ContractTerminatedEvent.class);
 
-            houseService.deactivateHouseForUser(event.getTenantId(), event.getHouseId());
+            houseService.deactivateHouseForUser(event.getTenantId(), event.getHouseId(), false);
 
             ack.acknowledge();
             log.info("[KAFKA] Contract terminated houseId={} tenantId={}",
                     event.getHouseId(), event.getTenantId());
         } catch (Exception e) {
             log.error("[KAFKA] handleContractTerminated failed: {}", e.getMessage(), e);
+            throw new RuntimeException(e);
+        }
+    }
+
+    @KafkaListener(topics = "contract.replaced", groupId = "house-group")
+    public void handleContractReplaced(
+            ConsumerRecord<String, String> record, Acknowledgment ack) {
+        try {
+            ContractReplacedEvent event = objectMapper.readValue(record.value(), ContractReplacedEvent.class);
+
+            houseService.deactivateHouseForUser(
+                    event.getTenantId(),
+                    event.getOldHouseId(),
+                    event.isKeepHouseUnavailable());
+
+            ack.acknowledge();
+            log.info("[KAFKA] Contract replaced oldHouseId={} tenantId={} keepUnavailable={}",
+                    event.getOldHouseId(), event.getTenantId(), event.isKeepHouseUnavailable());
+        } catch (Exception e) {
+            log.error("[KAFKA] handleContractReplaced failed: {}", e.getMessage(), e);
             throw new RuntimeException(e);
         }
     }

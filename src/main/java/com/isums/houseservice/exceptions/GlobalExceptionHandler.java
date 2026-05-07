@@ -3,6 +3,7 @@ package com.isums.houseservice.exceptions;
 import com.isums.houseservice.domains.dtos.ApiError;
 import com.isums.houseservice.domains.dtos.ApiResponse;
 import com.isums.houseservice.domains.dtos.ApiResponses;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -17,13 +18,14 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(DataAccessException.class)
     public ResponseEntity<ApiResponse<Void>> handleDb(DataAccessException ex) {
-        ex.getMostSpecificCause();
         String detail = ex.getMostSpecificCause().getMessage();
+        log.error("DB_ERROR: {}", detail, ex);
 
         ApiResponse<Void> res = ApiResponses.fail(
                 HttpStatus.INTERNAL_SERVER_ERROR,
@@ -77,6 +79,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleGeneric(Exception ex) {
+        log.error("UNHANDLED_EXCEPTION: {}", ex.getMessage(), ex);
         ApiResponse<Void> res = ApiResponses.fail(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "Unexpected error",

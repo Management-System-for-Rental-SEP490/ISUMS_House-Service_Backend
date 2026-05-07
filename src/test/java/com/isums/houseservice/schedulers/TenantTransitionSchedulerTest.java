@@ -41,7 +41,7 @@ class TenantTransitionSchedulerTest {
         House h1 = housePending(UUID.randomUUID(), Instant.now().minusSeconds(60));
         House h2 = housePending(UUID.randomUUID(), Instant.now().minusSeconds(30));
 
-        when(houseRepository.findByNextTenantIdIsNotNullAndNextHandoverDateBefore(any(Instant.class)))
+        when(houseRepository.findPendingHandoversDue(any(Instant.class)))
                 .thenReturn(List.of(h1, h2));
 
         scheduler.processHandovers();
@@ -53,7 +53,7 @@ class TenantTransitionSchedulerTest {
     @Test
     @DisplayName("does nothing when no pending houses")
     void none() {
-        when(houseRepository.findByNextTenantIdIsNotNullAndNextHandoverDateBefore(any(Instant.class)))
+        when(houseRepository.findPendingHandoversDue(any(Instant.class)))
                 .thenReturn(List.of());
 
         scheduler.processHandovers();
@@ -67,7 +67,7 @@ class TenantTransitionSchedulerTest {
         House ok = housePending(UUID.randomUUID(), Instant.now());
         House bad = housePending(UUID.randomUUID(), Instant.now());
 
-        when(houseRepository.findByNextTenantIdIsNotNullAndNextHandoverDateBefore(any(Instant.class)))
+        when(houseRepository.findPendingHandoversDue(any(Instant.class)))
                 .thenReturn(List.of(bad, ok));
 
         doThrow(new RuntimeException("transition broken"))

@@ -3,6 +3,7 @@ package com.isums.houseservice.infrastructures.grpcs;
 import com.isums.houseservice.domains.entities.House;
 import com.isums.houseservice.infrastructures.mappers.HouseGrpcMapper;
 import com.isums.houseservice.grpc.*;
+import com.isums.houseservice.grpc.GetAllHousesRequest;
 import com.isums.houseservice.infrastructures.repositories.HouseRepository;
 import com.isums.houseservice.domains.entities.Region;
 import com.isums.houseservice.infrastructures.repositories.RegionRepository;
@@ -172,6 +173,31 @@ public class HouseGrpcImpl extends HouseServiceGrpc.HouseServiceImplBase {
 
     @Override
     @Transactional(readOnly = true)
+    public void getAllHouses(GetAllHousesRequest request, StreamObserver<ListHouseResponse> responseObserver) {
+        try {
+            List<House> houses = houseRepository.findAll();
+            ListHouseResponse.Builder res = ListHouseResponse.newBuilder();
+            for (House house : houses) {
+                res.addHouse(houseGrpcMapper.toHouseResponse(house));
+            }
+            log.info("[HouseGrpc] getAllHouses returned {} houses", houses.size());
+            responseObserver.onNext(res.build());
+            responseObserver.onCompleted();
+        } catch (DataAccessException dae) {
+            log.error("DB error in getAllHouses", dae);
+            responseObserver.onError(
+                    Status.UNAVAILABLE.withDescription("Database unavailable").withCause(dae).asRuntimeException()
+            );
+        } catch (Exception ex) {
+            log.error("Unexpected error in getAllHouses", ex);
+            responseObserver.onError(
+                    Status.INTERNAL.withDescription("Internal server error").withCause(ex).asRuntimeException()
+            );
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public void getHousesByManagerRegion(GetHouseByUserRequest request, StreamObserver<ListHouseResponse> responseObserver) {
         try {
             String userId = request.getUserId().trim();
@@ -204,3 +230,4 @@ public class HouseGrpcImpl extends HouseServiceGrpc.HouseServiceImplBase {
         }
     }
 }
+

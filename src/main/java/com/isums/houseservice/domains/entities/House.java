@@ -3,7 +3,10 @@ package com.isums.houseservice.domains.entities;
 import common.i18n.TranslationMap;
 import common.i18n.TranslationMapConverter;
 import com.isums.houseservice.domains.emuns.HouseStatus;
+import com.isums.houseservice.domains.emuns.HouseStructure;
 import jakarta.persistence.*;
+
+import java.math.BigDecimal;
 import lombok.*;
 import org.hibernate.annotations.UuidGenerator;
 
@@ -76,6 +79,22 @@ public class House {
     @Column(name = "number_of_floors")
     private Integer numberOfFloors;
 
+    @Column(name = "area_m2", precision = 10, scale = 2)
+    private BigDecimal areaM2;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "structure", length = 32)
+    private HouseStructure structure;
+
+    @Column(name = "land_cert_number", length = 128)
+    private String landCertNumber;
+
+    @Column(name = "land_cert_issue_date")
+    private java.time.LocalDate landCertIssueDate;
+
+    @Column(name = "land_cert_issuer")
+    private String landCertIssuer;
+
     @Column(name = "payment_restricted")
     @Builder.Default
     private Boolean paymentRestricted = false;
@@ -128,3 +147,4 @@ public class House {
         area.setHouse(null);
     }
 }
+

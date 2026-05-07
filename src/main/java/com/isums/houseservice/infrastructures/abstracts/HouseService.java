@@ -5,6 +5,8 @@ import com.isums.houseservice.domains.dtos.HouseAccessStatus;
 import com.isums.houseservice.domains.dtos.HouseDto;
 import com.isums.houseservice.domains.dtos.HouseHistoryItemDto;
 import com.isums.houseservice.domains.dtos.HouseImageDto;
+import com.isums.houseservice.domains.dtos.UpdateHouseTranslationsRequest;
+import com.isums.houseservice.domains.emuns.HouseStatus;
 import com.isums.houseservice.domains.entities.House;
 import com.isums.houseservice.domains.entities.HouseImage;
 import common.paginations.dtos.PageRequest;
@@ -36,7 +38,19 @@ public interface HouseService {
 
     List<HouseAccessStatus> getMyHouseAccess(String keycloakId);
 
-    void deactivateHouseForUser(UUID tenantId, UUID houseId);
+    void deactivateHouseForUser(UUID tenantId, UUID houseId, boolean keepUnavailable);
 
     void setTenantAccessRestriction(UUID tenantId, UUID houseId, boolean restricted);
+
+    HouseDto updateHouseTranslations(UUID houseId, UpdateHouseTranslationsRequest request);
+
+    HouseDto updateHouse(UUID id, CreateHouseRequest req);
+
+    HouseDto updateHouseStatus(UUID id, HouseStatus nextStatus, UUID actorId);
+
+    void subscribeToAvailability(UUID houseId, String keycloakId);
+
+    void unsubscribeFromAvailability(UUID houseId, String keycloakId);
+
+    boolean isSubscribed(UUID houseId, String keycloakId);
 }

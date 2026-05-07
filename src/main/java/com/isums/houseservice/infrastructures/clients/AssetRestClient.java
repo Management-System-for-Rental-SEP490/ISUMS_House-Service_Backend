@@ -21,7 +21,7 @@ import java.util.UUID;
 public class AssetRestClient {
     private final ObjectMapper objectMapper;
 
-    @Value("${asset.service.url:http://localhost:18090}")
+    @Value("${asset.service.url:http://localhost:8084}")
     private String assetServiceUrl;
 
     public List<AreaAssetCountDto> getAssetCountByHouseId(UUID houseId, String bearerToken) {

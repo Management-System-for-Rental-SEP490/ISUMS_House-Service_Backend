@@ -47,6 +47,11 @@ public class TranslationMap {
                 .orElse(null);
     }
 
+    /** Language resolved from header → JWT → LocaleContext → JVM default. "vi"/"en"/"ja". */
+    public static String currentLanguage() {
+        return new TranslationMap().resolveLanguage();
+    }
+
     private String resolveLanguage() {
         String headerLanguage = resolveHeaderLanguage();
         if (headerLanguage != null) {
