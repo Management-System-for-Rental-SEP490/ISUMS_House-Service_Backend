@@ -41,7 +41,8 @@ public interface HouseRepository extends JpaRepository<House, UUID>, JpaSpecific
 
     @Query("""
     SELECT h FROM House h
-    WHERE h.nextTenantId = :userId
+    WHERE (h.nextTenantId = :userId
+        AND h.status = com.isums.houseservice.domains.emuns.HouseStatus.RENTED)
     OR EXISTS (
         SELECT 1 FROM TenantGroup g
         JOIN TenantMember m ON m.id.tenantId = g.id

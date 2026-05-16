@@ -1009,6 +1009,8 @@ class HouseServiceImplTest {
             house.setUserRentalId(userId);
             house.setTenantGroupId(UUID.randomUUID());
             house.setHandoverDate(Instant.now());
+            house.setNextTenantId(userId);
+            house.setNextHandoverDate(Instant.now().plusSeconds(3600));
             house.setStatus(HouseStatus.RENTED);
 
             given(houseRepository.findById(houseId)).willReturn(Optional.of(house));
@@ -1021,7 +1023,30 @@ class HouseServiceImplTest {
             assertThat(saved.getUserRentalId()).isNull();
             assertThat(saved.getTenantGroupId()).isNull();
             assertThat(saved.getHandoverDate()).isNull();
+            assertThat(saved.getNextTenantId()).isNull();
+            assertThat(saved.getNextHandoverDate()).isNull();
             assertThat(saved.getStatus()).isEqualTo(HouseStatus.AVAILABLE);
+        }
+
+        @Test
+        @DisplayName("should preserve pending next tenant when it belongs to another user")
+        void deactivateHouseForUser_preservesOtherNextTenant() {
+            UUID otherTenantId = UUID.randomUUID();
+            Instant nextHandover = Instant.now().plusSeconds(3600);
+            house.setUserRentalId(userId);
+            house.setNextTenantId(otherTenantId);
+            house.setNextHandoverDate(nextHandover);
+            house.setStatus(HouseStatus.RENTED);
+
+            given(houseRepository.findById(houseId)).willReturn(Optional.of(house));
+
+            houseService.deactivateHouseForUser(userId, houseId, false);
+
+            ArgumentCaptor<House> captor = ArgumentCaptor.forClass(House.class);
+            verify(houseRepository).save(captor.capture());
+            House saved = captor.getValue();
+            assertThat(saved.getNextTenantId()).isEqualTo(otherTenantId);
+            assertThat(saved.getNextHandoverDate()).isEqualTo(nextHandover);
         }
 
         @Test

@@ -8,6 +8,8 @@ import jakarta.persistence.*;
 
 import java.math.BigDecimal;
 import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.annotations.UuidGenerator;
 
 import java.time.Instant;
@@ -123,8 +125,12 @@ public class House {
     @Builder.Default
     private List<HouseImage> houseImages = new ArrayList<>();
 
+    @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
     private Instant createdAt;
 
+    @UpdateTimestamp
+    @Column(name = "updated_at")
     private Instant updatedAt;
 
     @OneToMany(mappedBy = "house")
