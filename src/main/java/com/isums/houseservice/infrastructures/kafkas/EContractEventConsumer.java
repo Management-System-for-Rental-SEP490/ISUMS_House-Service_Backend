@@ -24,16 +24,22 @@ public class EContractEventConsumer {
 
     @KafkaListener(topics = "map-user-to-house-topic", groupId = "house-group")
     public void handleMapUserToHouse(ConsumerRecord<String, String> record, Acknowledgment ack) {
+        log.info("[KAFKA] map-user-to-house received partition={} offset={}",
+                record.partition(), record.offset());
         try {
             MapUserToHouseEvent event = objectMapper.readValue(record.value(), MapUserToHouseEvent.class);
+            log.info("[KAFKA] map-user-to-house parsed userId={} houseId={} handoverDate={}",
+                    event.getUserId(), event.getHouseId(), event.getHandoverDate());
             houseService.activeHouseForUser(event.getUserId(), event.getHouseId(), event.getHandoverDate());
-            ack.acknowledge();
             log.info("[KAFKA] Mapped userId={} houseId={}", event.getUserId(), event.getHouseId());
+            ack.acknowledge();
         } catch (tools.jackson.core.JacksonException e) {
-            log.error("[KAFKA] Deserialize failed raw={}: {}", record.value(), e.getMessage());
+            log.error("[KAFKA] Deserialize failed partition={} offset={} raw={}: {}",
+                    record.partition(), record.offset(), record.value(), e.getMessage());
             ack.acknowledge();
         } catch (Exception e) {
-            log.error("[KAFKA] handleMapUserToHouse failed: {}", e.getMessage(), e);
+            log.error("[KAFKA] handleMapUserToHouse failed partition={} offset={}: {}",
+                    record.partition(), record.offset(), e.getMessage(), e);
             throw new RuntimeException(e);
         }
     }
@@ -77,14 +83,16 @@ public class EContractEventConsumer {
                     event.getOldHouseId(),
                     event.isKeepHouseUnavailable());
 
-            ack.acknowledge();
             log.info("[KAFKA] contract.replaced processed msgId={} oldHouseId={}",
                     event.getMessageId(), event.getOldHouseId());
+            ack.acknowledge();
         } catch (tools.jackson.core.JacksonException e) {
-            log.error("[KAFKA] contract.replaced deserialize failed raw={}: {}", record.value(), e.getMessage());
+            log.error("[KAFKA] contract.replaced deserialize failed partition={} offset={} raw={}: {}",
+                    record.partition(), record.offset(), record.value(), e.getMessage());
             ack.acknowledge();
         } catch (Exception e) {
-            log.error("[KAFKA] handleContractReplaced failed: {}", e.getMessage(), e);
+            log.error("[KAFKA] handleContractReplaced failed partition={} offset={}: {}",
+                    record.partition(), record.offset(), e.getMessage(), e);
             throw new RuntimeException(e);
         }
     }

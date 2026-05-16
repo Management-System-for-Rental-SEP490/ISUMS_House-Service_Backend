@@ -297,7 +297,7 @@ public class HouseServiceImpl implements HouseService {
 
     @Override
     @Transactional(readOnly = true)
-    @Cacheable(value = "user-house-access", key = "#keycloakId")
+//    @Cacheable(value = "user-house-access", key = "#keycloakId")
     public List<HouseAccessStatus> getMyHouseAccess(String keycloakId) {
         UserResponse user = userClientsGrpc.getUserIdAndRoleByKeyCloakId(keycloakId);
         UUID userId = UUID.fromString(user.getId());
@@ -452,6 +452,10 @@ public class HouseServiceImpl implements HouseService {
         house.setUserRentalId(null);
         house.setTenantGroupId(null);
         house.setHandoverDate(null);
+        if (tenantId.equals(house.getNextTenantId())) {
+            house.setNextTenantId(null);
+            house.setNextHandoverDate(null);
+        }
         house.setStatus(keepUnavailable ? HouseStatus.REPAIRED : HouseStatus.AVAILABLE);
         house.setUpdatedAt(Instant.now());
         houseRepository.save(house);
@@ -583,6 +587,8 @@ public class HouseServiceImpl implements HouseService {
     }
 
     private void activateNow(House house, UUID userId, Instant handoverDate) {
+        deactivateOtherActiveHousesOfUser(userId, house.getId());
+
         if (house.getTenantGroupId() != null) {
             tenantGroupRepository.findById(house.getTenantGroupId()).ifPresent(g -> {
                 g.setActive(false);
@@ -909,5 +915,39 @@ public class HouseServiceImpl implements HouseService {
                 issue.createdAt(),
                 happenedAt
         );
+    }
+
+    private void deactivateOtherActiveHousesOfUser(UUID userId, UUID newHouseId) {
+        List<House> currentHouses = houseRepository.findByUserRentalId(userId);
+
+        for (House oldHouse : currentHouses) {
+            if (!oldHouse.getId().equals(newHouseId)) {
+                tenantGroupRepository.findByHouseIdAndIsActiveTrue(oldHouse.getId()).ifPresent(group -> {
+                    for (TenantMember m : tenantMemberRepository.findByTenantGroupId(group.getId())) {
+                        if (m.isActive()) {
+                            m.setActive(false);
+                            tenantMemberRepository.save(m);
+                        }
+                    }
+                    group.setActive(false);
+                    tenantGroupRepository.save(group);
+                });
+
+                oldHouse.setUserRentalId(null);
+                oldHouse.setTenantGroupId(null);
+                oldHouse.setHandoverDate(null);
+
+                if (userId.equals(oldHouse.getNextTenantId())) {
+                    oldHouse.setNextTenantId(null);
+                    oldHouse.setNextHandoverDate(null);
+                }
+
+                oldHouse.setUpdatedAt(Instant.now());
+                houseRepository.save(oldHouse);
+
+                log.info("[House] Auto-deactivated old houseId={} for userId={} before activating newHouseId={}",
+                        oldHouse.getId(), userId, newHouseId);
+            }
+        }
     }
 }
