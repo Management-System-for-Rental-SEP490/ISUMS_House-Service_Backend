@@ -65,7 +65,7 @@ dependencies {
     implementation 'io.micrometer:micrometer-tracing-bridge-otel'
     implementation 'io.micrometer:micrometer-registry-prometheus'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
-    implementation 'com.isums:isums-observability-common:1.0-SNAPSHOT'
+    implementation 'com.isums:isums-observability-common:1.1.0'
     implementation 'org.springframework.boot:spring-boot-starter-kafka'
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
     implementation "org.springframework.grpc:spring-grpc-spring-boot-starter"
