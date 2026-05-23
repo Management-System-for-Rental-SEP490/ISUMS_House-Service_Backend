@@ -1,6 +1,7 @@
 package com.isums.houseservice.infrastructures.kafkas;
 
 import com.isums.houseservice.domains.events.ContractCancelledByTenantEvent;
+import com.isums.houseservice.domains.events.ContractDepositExpiredEvent;
 import com.isums.houseservice.domains.events.ContractReplacedEvent;
 import com.isums.houseservice.domains.events.ContractTerminatedEvent;
 import com.isums.houseservice.domains.events.InspectionDoneNotifyEvent;
@@ -21,6 +22,7 @@ public class EContractEventConsumer {
 
     private final HouseService houseService;
     private final ObjectMapper objectMapper;
+    private final com.fasterxml.jackson.databind.ObjectMapper jackson2Mapper;
 
     @KafkaListener(topics = "map-user-to-house-topic", groupId = "house-group")
     public void handleMapUserToHouse(ConsumerRecord<String, String> record, Acknowledgment ack) {
@@ -151,6 +153,45 @@ public class EContractEventConsumer {
             ack.acknowledge();
         } catch (Exception e) {
             log.error("[KAFKA] handleInspectionDone failed: {}", e.getMessage(), e);
+            throw new RuntimeException(e);
+        }
+    }
+
+    @KafkaListener(topics = "contract.deposit-expired", groupId = "house-group-v2",
+            properties = {"auto.offset.reset:earliest"})
+    public void handleContractDepositExpired(String payload) {
+        log.info("[KAFKA] contract.deposit-expired ENTRY len={}",
+                payload != null ? payload.length() : -1);
+        try {
+            if (payload == null) {
+                log.error("[KAFKA] contract.deposit-expired null payload, skipping");
+                return;
+            }
+            ContractDepositExpiredEvent event = jackson2Mapper.readValue(
+                    payload, ContractDepositExpiredEvent.class);
+
+            if (event.getHouseId() == null || event.getTenantId() == null) {
+                log.warn("[KAFKA] contract.deposit-expired missing houseId/tenantId msgId={} contractId={}",
+                        event.getMessageId(), event.getContractId());
+                return;
+            }
+
+            log.info("[KAFKA] contract.deposit-expired received msgId={} contractId={} houseId={} tenantId={}",
+                    event.getMessageId(), event.getContractId(),
+                    event.getHouseId(), event.getTenantId());
+
+            houseService.deactivateHouseForUser(
+                    event.getTenantId(),
+                    event.getHouseId(),
+                    false);
+
+            log.info("[KAFKA] contract.deposit-expired processed msgId={} houseId={} -> released",
+                    event.getMessageId(), event.getHouseId());
+        } catch (com.fasterxml.jackson.core.JacksonException e) {
+            log.error("[KAFKA] contract.deposit-expired deserialize failed raw={}: {}",
+                    payload, e.getMessage());
+        } catch (Exception e) {
+            log.error("[KAFKA] handleContractDepositExpired failed: {}", e.getMessage(), e);
             throw new RuntimeException(e);
         }
     }

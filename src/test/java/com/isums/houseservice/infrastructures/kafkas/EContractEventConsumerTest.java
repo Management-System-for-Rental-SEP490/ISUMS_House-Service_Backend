@@ -1,5 +1,6 @@
 package com.isums.houseservice.infrastructures.kafkas;
 
+import com.isums.houseservice.domains.events.ContractDepositExpiredEvent;
 import com.isums.houseservice.domains.events.ContractTerminatedEvent;
 import com.isums.houseservice.domains.events.MapUserToHouseEvent;
 import com.isums.houseservice.infrastructures.abstracts.HouseService;
@@ -20,6 +21,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
@@ -33,6 +35,7 @@ class EContractEventConsumerTest {
 
     @Mock private HouseService houseService;
     @Mock private ObjectMapper objectMapper;
+    @Mock private com.fasterxml.jackson.databind.ObjectMapper jackson2Mapper;
     @Mock private Acknowledgment ack;
 
     @InjectMocks private EContractEventConsumer consumer;
@@ -115,6 +118,86 @@ class EContractEventConsumerTest {
             assertThatThrownBy(() -> consumer.handleContractTerminated(rec, ack))
                     .isInstanceOf(RuntimeException.class);
             verify(ack, never()).acknowledge();
+        }
+    }
+
+    @Nested
+    @DisplayName("handleContractDepositExpired")
+    class HandleContractDepositExpired {
+
+        @Test
+        @DisplayName("releases the house when deposit expires (happy path)")
+        void happyPath() throws Exception {
+            UUID tenantId = UUID.randomUUID();
+            UUID houseId = UUID.randomUUID();
+            ContractDepositExpiredEvent event = new ContractDepositExpiredEvent(
+                    "msg-1", UUID.randomUUID(), tenantId, houseId, UUID.randomUUID());
+            when(jackson2Mapper.readValue("payload", ContractDepositExpiredEvent.class))
+                    .thenReturn(event);
+
+            consumer.handleContractDepositExpired("payload");
+
+            verify(houseService).deactivateHouseForUser(tenantId, houseId, false);
+        }
+
+        @Test
+        @DisplayName("skips when payload is null")
+        void nullPayload() {
+            consumer.handleContractDepositExpired(null);
+            verifyNoInteractions(houseService, jackson2Mapper);
+        }
+
+        @Test
+        @DisplayName("skips and does not call houseService when houseId is missing")
+        void missingHouseId() throws Exception {
+            ContractDepositExpiredEvent event = new ContractDepositExpiredEvent(
+                    "msg-2", UUID.randomUUID(), UUID.randomUUID(), null, UUID.randomUUID());
+            when(jackson2Mapper.readValue("payload", ContractDepositExpiredEvent.class))
+                    .thenReturn(event);
+
+            consumer.handleContractDepositExpired("payload");
+
+            verify(houseService, never()).deactivateHouseForUser(any(), any(), anyBoolean());
+        }
+
+        @Test
+        @DisplayName("skips and does not call houseService when tenantId is missing")
+        void missingTenantId() throws Exception {
+            ContractDepositExpiredEvent event = new ContractDepositExpiredEvent(
+                    "msg-3", UUID.randomUUID(), null, UUID.randomUUID(), UUID.randomUUID());
+            when(jackson2Mapper.readValue("payload", ContractDepositExpiredEvent.class))
+                    .thenReturn(event);
+
+            consumer.handleContractDepositExpired("payload");
+
+            verify(houseService, never()).deactivateHouseForUser(any(), any(), anyBoolean());
+        }
+
+        @Test
+        @DisplayName("swallows JacksonException (no retry) — does not invoke houseService")
+        void badJson() throws Exception {
+            when(jackson2Mapper.readValue(any(String.class), eq(ContractDepositExpiredEvent.class)))
+                    .thenThrow(new com.fasterxml.jackson.core.JsonParseException(null, "bad json"));
+
+            consumer.handleContractDepositExpired("payload");
+
+            verifyNoInteractions(houseService);
+        }
+
+        @Test
+        @DisplayName("rethrows RuntimeException when downstream service fails (so Kafka retries)")
+        void downstreamFails() throws Exception {
+            UUID tenantId = UUID.randomUUID();
+            UUID houseId = UUID.randomUUID();
+            ContractDepositExpiredEvent event = new ContractDepositExpiredEvent(
+                    "msg-4", UUID.randomUUID(), tenantId, houseId, UUID.randomUUID());
+            when(jackson2Mapper.readValue("payload", ContractDepositExpiredEvent.class))
+                    .thenReturn(event);
+            doThrow(new RuntimeException("house service down"))
+                    .when(houseService).deactivateHouseForUser(eq(tenantId), eq(houseId), eq(false));
+
+            assertThatThrownBy(() -> consumer.handleContractDepositExpired("payload"))
+                    .isInstanceOf(RuntimeException.class);
         }
     }
 }
