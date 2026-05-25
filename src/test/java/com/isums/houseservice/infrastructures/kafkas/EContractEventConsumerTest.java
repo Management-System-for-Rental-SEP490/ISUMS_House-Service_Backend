@@ -1,11 +1,14 @@
 package com.isums.houseservice.infrastructures.kafkas;
 
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.isums.houseservice.domains.events.ContractCancelledByTenantEvent;
 import com.isums.houseservice.domains.events.ContractDepositExpiredEvent;
 import com.isums.houseservice.domains.events.ContractReplacedEvent;
 import com.isums.houseservice.domains.events.ContractTerminatedEvent;
+import com.isums.houseservice.domains.events.InspectionDoneNotifyEvent;
 import com.isums.houseservice.domains.events.MapUserToHouseEvent;
 import com.isums.houseservice.infrastructures.abstracts.HouseService;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -13,9 +16,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.kafka.support.Acknowledgment;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -36,8 +36,6 @@ class EContractEventConsumerTest {
 
     @Mock private HouseService houseService;
     @Mock private ObjectMapper objectMapper;
-    @Mock private com.fasterxml.jackson.databind.ObjectMapper jackson2Mapper;
-    @Mock private Acknowledgment ack;
 
     @InjectMocks private EContractEventConsumer consumer;
 
@@ -45,32 +43,34 @@ class EContractEventConsumerTest {
     @DisplayName("handleMapUserToHouse")
     class HandleMapUserToHouse {
 
-        private ConsumerRecord<String, String> rec = new ConsumerRecord<>(
-                "map-user-to-house-topic", 0, 0L, "k", "payload");
-
         @Test
-        @DisplayName("maps user to house and acknowledges on happy path")
+        @DisplayName("maps user to house on happy path")
         void happyPath() throws Exception {
             MapUserToHouseEvent event = MapUserToHouseEvent.builder()
                     .userId(UUID.randomUUID()).houseId(UUID.randomUUID())
                     .handoverDate(Instant.now()).build();
             when(objectMapper.readValue("payload", MapUserToHouseEvent.class)).thenReturn(event);
 
-            consumer.handleMapUserToHouse(rec, ack);
+            consumer.handleMapUserToHouse("payload");
 
             verify(houseService).activeHouseForUser(event.getUserId(), event.getHouseId(), event.getHandoverDate());
-            verify(ack).acknowledge();
         }
 
         @Test
-        @DisplayName("swallows JacksonException and acks (bad message, no retry)")
+        @DisplayName("swallows JSON parse error (poison-pill, no retry)")
         void badJson() throws Exception {
             when(objectMapper.readValue(any(String.class), eq(MapUserToHouseEvent.class)))
-                    .thenThrow(new JacksonException("bad") {});
+                    .thenThrow(new JsonParseException(null, "bad"));
 
-            consumer.handleMapUserToHouse(rec, ack);
+            consumer.handleMapUserToHouse("payload");
 
-            verify(ack).acknowledge();
+            verifyNoInteractions(houseService);
+        }
+
+        @Test
+        @DisplayName("swallows null payload (no work, no NPE)")
+        void nullPayload() {
+            consumer.handleMapUserToHouse(null);
             verifyNoInteractions(houseService);
         }
 
@@ -81,12 +81,11 @@ class EContractEventConsumerTest {
                     .userId(UUID.randomUUID()).houseId(UUID.randomUUID())
                     .handoverDate(Instant.now()).build();
             when(objectMapper.readValue("payload", MapUserToHouseEvent.class)).thenReturn(event);
-            doThrow(new RuntimeException("service down"))
+            doThrow(new RuntimeException("house service down"))
                     .when(houseService).activeHouseForUser(any(), any(), any());
 
-            assertThatThrownBy(() -> consumer.handleMapUserToHouse(rec, ack))
+            assertThatThrownBy(() -> consumer.handleMapUserToHouse("payload"))
                     .isInstanceOf(RuntimeException.class);
-            verify(ack, never()).acknowledge();
         }
     }
 
@@ -94,110 +93,48 @@ class EContractEventConsumerTest {
     @DisplayName("handleContractTerminated")
     class HandleContractTerminated {
 
-        private ConsumerRecord<String, String> rec = new ConsumerRecord<>(
-                "contract.terminated", 0, 0L, "k", "payload");
-
         @Test
-        @DisplayName("deactivates house and acknowledges on happy path")
+        @DisplayName("releases house on happy path")
         void happyPath() throws Exception {
-            ContractTerminatedEvent event = new ContractTerminatedEvent(
-                    UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "msg-1");
-            when(objectMapper.readValue("payload", ContractTerminatedEvent.class)).thenReturn(event);
+            ContractTerminatedEvent event = new ContractTerminatedEvent();
+            event.setTenantId(UUID.randomUUID());
+            event.setHouseId(UUID.randomUUID());
+            when(objectMapper.readValue("v", ContractTerminatedEvent.class)).thenReturn(event);
 
-            consumer.handleContractTerminated(rec, ack);
+            consumer.handleContractTerminated("v");
 
             verify(houseService).deactivateHouseForUser(event.getTenantId(), event.getHouseId(), false);
-            verify(ack).acknowledge();
         }
 
         @Test
-        @DisplayName("rethrows RuntimeException on any exception (for retry)")
-        void fails() throws Exception {
-            when(objectMapper.readValue(any(String.class), eq(ContractTerminatedEvent.class)))
-                    .thenThrow(new RuntimeException("bad"));
-
-            assertThatThrownBy(() -> consumer.handleContractTerminated(rec, ack))
-                    .isInstanceOf(RuntimeException.class);
-            verify(ack, never()).acknowledge();
-        }
-    }
-
-    @Nested
-    @DisplayName("handleContractDepositExpired")
-    class HandleContractDepositExpired {
-
-        @Test
-        @DisplayName("releases the house when deposit expires (happy path)")
-        void happyPath() throws Exception {
-            UUID tenantId = UUID.randomUUID();
-            UUID houseId = UUID.randomUUID();
-            ContractDepositExpiredEvent event = new ContractDepositExpiredEvent(
-                    "msg-1", UUID.randomUUID(), tenantId, houseId, UUID.randomUUID());
-            when(jackson2Mapper.readValue("payload", ContractDepositExpiredEvent.class))
-                    .thenReturn(event);
-
-            consumer.handleContractDepositExpired("payload");
-
-            verify(houseService).deactivateHouseForUser(tenantId, houseId, false);
-        }
-
-        @Test
-        @DisplayName("skips when payload is null")
+        @DisplayName("swallows null payload")
         void nullPayload() {
-            consumer.handleContractDepositExpired(null);
-            verifyNoInteractions(houseService, jackson2Mapper);
+            consumer.handleContractTerminated(null);
+            verifyNoInteractions(houseService);
         }
 
         @Test
-        @DisplayName("skips and does not call houseService when houseId is missing")
-        void missingHouseId() throws Exception {
-            ContractDepositExpiredEvent event = new ContractDepositExpiredEvent(
-                    "msg-2", UUID.randomUUID(), UUID.randomUUID(), null, UUID.randomUUID());
-            when(jackson2Mapper.readValue("payload", ContractDepositExpiredEvent.class))
-                    .thenReturn(event);
-
-            consumer.handleContractDepositExpired("payload");
-
-            verify(houseService, never()).deactivateHouseForUser(any(), any(), anyBoolean());
-        }
-
-        @Test
-        @DisplayName("skips and does not call houseService when tenantId is missing")
-        void missingTenantId() throws Exception {
-            ContractDepositExpiredEvent event = new ContractDepositExpiredEvent(
-                    "msg-3", UUID.randomUUID(), null, UUID.randomUUID(), UUID.randomUUID());
-            when(jackson2Mapper.readValue("payload", ContractDepositExpiredEvent.class))
-                    .thenReturn(event);
-
-            consumer.handleContractDepositExpired("payload");
-
-            verify(houseService, never()).deactivateHouseForUser(any(), any(), anyBoolean());
-        }
-
-        @Test
-        @DisplayName("swallows JacksonException (no retry) — does not invoke houseService")
+        @DisplayName("swallows JSON parse error (no retry)")
         void badJson() throws Exception {
-            when(jackson2Mapper.readValue(any(String.class), eq(ContractDepositExpiredEvent.class)))
-                    .thenThrow(new com.fasterxml.jackson.core.JsonParseException(null, "bad json"));
+            when(objectMapper.readValue(any(String.class), eq(ContractTerminatedEvent.class)))
+                    .thenThrow(new JsonParseException(null, "bad"));
 
-            consumer.handleContractDepositExpired("payload");
+            consumer.handleContractTerminated("v");
 
             verifyNoInteractions(houseService);
         }
 
         @Test
-        @DisplayName("rethrows RuntimeException when downstream service fails (so Kafka retries)")
+        @DisplayName("rethrows on downstream failure for retry")
         void downstreamFails() throws Exception {
-            UUID tenantId = UUID.randomUUID();
-            UUID houseId = UUID.randomUUID();
-            ContractDepositExpiredEvent event = new ContractDepositExpiredEvent(
-                    "msg-4", UUID.randomUUID(), tenantId, houseId, UUID.randomUUID());
-            when(jackson2Mapper.readValue("payload", ContractDepositExpiredEvent.class))
-                    .thenReturn(event);
-            doThrow(new RuntimeException("house service down"))
-                    .when(houseService).deactivateHouseForUser(eq(tenantId), eq(houseId), eq(false));
+            ContractTerminatedEvent event = new ContractTerminatedEvent();
+            event.setTenantId(UUID.randomUUID());
+            event.setHouseId(UUID.randomUUID());
+            when(objectMapper.readValue("v", ContractTerminatedEvent.class)).thenReturn(event);
+            doThrow(new RuntimeException("db down"))
+                    .when(houseService).deactivateHouseForUser(any(), any(), anyBoolean());
 
-            assertThatThrownBy(() -> consumer.handleContractDepositExpired("payload"))
+            assertThatThrownBy(() -> consumer.handleContractTerminated("v"))
                     .isInstanceOf(RuntimeException.class);
         }
     }
@@ -205,9 +142,6 @@ class EContractEventConsumerTest {
     @Nested
     @DisplayName("handleContractReplaced (đổi nhà)")
     class HandleContractReplaced {
-
-        private final ConsumerRecord<String, String> rec =
-                new ConsumerRecord<>("contract.replaced", 0, 0L, "k", "v");
 
         private ContractReplacedEvent event(boolean keepUnavailable) {
             ContractReplacedEvent e = new ContractReplacedEvent();
@@ -231,10 +165,9 @@ class EContractEventConsumerTest {
             ContractReplacedEvent evt = event(false);
             when(objectMapper.readValue("v", ContractReplacedEvent.class)).thenReturn(evt);
 
-            consumer.handleContractReplaced(rec, ack);
+            consumer.handleContractReplaced("v");
 
             verify(houseService).deactivateHouseForUser(evt.getTenantId(), evt.getOldHouseId(), false);
-            verify(ack).acknowledge();
         }
 
         @Test
@@ -243,75 +176,178 @@ class EContractEventConsumerTest {
             ContractReplacedEvent evt = event(true);
             when(objectMapper.readValue("v", ContractReplacedEvent.class)).thenReturn(evt);
 
-            consumer.handleContractReplaced(rec, ack);
+            consumer.handleContractReplaced("v");
 
             verify(houseService).deactivateHouseForUser(evt.getTenantId(), evt.getOldHouseId(), true);
-            verify(ack).acknowledge();
         }
 
         @Test
-        @DisplayName("missing oldHouseId — skips processing + acks (won't pin partition)")
+        @DisplayName("missing oldHouseId — skips processing")
         void missingOldHouseIdSkips() throws Exception {
             ContractReplacedEvent evt = event(false);
             evt.setOldHouseId(null);
             when(objectMapper.readValue("v", ContractReplacedEvent.class)).thenReturn(evt);
 
-            consumer.handleContractReplaced(rec, ack);
+            consumer.handleContractReplaced("v");
 
             verify(houseService, never()).deactivateHouseForUser(any(), any(), anyBoolean());
-            verify(ack).acknowledge();
         }
 
         @Test
-        @DisplayName("missing tenantId — skips processing + acks")
+        @DisplayName("missing tenantId — skips processing")
         void missingTenantIdSkips() throws Exception {
             ContractReplacedEvent evt = event(false);
             evt.setTenantId(null);
             when(objectMapper.readValue("v", ContractReplacedEvent.class)).thenReturn(evt);
 
-            consumer.handleContractReplaced(rec, ack);
+            consumer.handleContractReplaced("v");
 
             verify(houseService, never()).deactivateHouseForUser(any(), any(), anyBoolean());
-            verify(ack).acknowledge();
         }
 
         @Test
-        @DisplayName("swallows JacksonException on poison-pill (acks, no retry)")
-        void poisonPillAcked() throws Exception {
+        @DisplayName("swallows JSON parse error on poison-pill")
+        void poisonPill() throws Exception {
             when(objectMapper.readValue(any(String.class), eq(ContractReplacedEvent.class)))
-                    .thenThrow(new JacksonException("bad json") {});
+                    .thenThrow(new JsonParseException(null, "bad"));
 
-            consumer.handleContractReplaced(rec, ack);
+            consumer.handleContractReplaced("v");
 
-            verify(ack).acknowledge();
             verifyNoInteractions(houseService);
         }
 
         @Test
-        @DisplayName("rethrows on downstream service failure (so Kafka retries)")
+        @DisplayName("rethrows on downstream service failure for retry")
         void downstreamFailureRetries() throws Exception {
             ContractReplacedEvent evt = event(false);
             when(objectMapper.readValue("v", ContractReplacedEvent.class)).thenReturn(evt);
             doThrow(new RuntimeException("house service down"))
                     .when(houseService).deactivateHouseForUser(any(), any(), anyBoolean());
 
-            assertThatThrownBy(() -> consumer.handleContractReplaced(rec, ack))
+            assertThatThrownBy(() -> consumer.handleContractReplaced("v"))
                     .isInstanceOf(RuntimeException.class);
-            verify(ack, never()).acknowledge();
         }
 
         @Test
-        @DisplayName("replay (idempotency by downstream): listener acks both invocations — dedup is downstream's job")
-        void replayBothAcked() throws Exception {
+        @DisplayName("replay invokes downstream twice (dedup is downstream's job)")
+        void replayBoth() throws Exception {
             ContractReplacedEvent evt = event(false);
             when(objectMapper.readValue("v", ContractReplacedEvent.class)).thenReturn(evt);
 
-            consumer.handleContractReplaced(rec, ack);
-            consumer.handleContractReplaced(rec, ack);
+            consumer.handleContractReplaced("v");
+            consumer.handleContractReplaced("v");
 
             verify(houseService, org.mockito.Mockito.times(2))
                     .deactivateHouseForUser(evt.getTenantId(), evt.getOldHouseId(), false);
-            verify(ack, org.mockito.Mockito.times(2)).acknowledge();
+        }
+    }
+
+    @Nested
+    @DisplayName("handleContractCancelledByTenant")
+    class HandleContractCancelledByTenant {
+
+        @Test
+        @DisplayName("releases house on happy path")
+        void happyPath() throws Exception {
+            ContractCancelledByTenantEvent event = new ContractCancelledByTenantEvent();
+            event.setTenantId(UUID.randomUUID());
+            event.setHouseId(UUID.randomUUID());
+            when(objectMapper.readValue("v", ContractCancelledByTenantEvent.class)).thenReturn(event);
+
+            consumer.handleContractCancelledByTenant("v");
+
+            verify(houseService).deactivateHouseForUser(event.getTenantId(), event.getHouseId(), false);
+        }
+
+        @Test
+        @DisplayName("skips when houseId/tenantId missing")
+        void missingFields() throws Exception {
+            ContractCancelledByTenantEvent event = new ContractCancelledByTenantEvent();
+            when(objectMapper.readValue("v", ContractCancelledByTenantEvent.class)).thenReturn(event);
+
+            consumer.handleContractCancelledByTenant("v");
+
+            verify(houseService, never()).deactivateHouseForUser(any(), any(), anyBoolean());
+        }
+    }
+
+    @Nested
+    @DisplayName("handleInspectionDone")
+    class HandleInspectionDone {
+
+        @Test
+        @DisplayName("releases house on happy path")
+        void happyPath() throws Exception {
+            InspectionDoneNotifyEvent event = new InspectionDoneNotifyEvent();
+            event.setMessageId(UUID.randomUUID().toString());
+            event.setContractId(UUID.randomUUID());
+            event.setHouseId(UUID.randomUUID());
+            event.setTenantId(UUID.randomUUID());
+            when(objectMapper.readValue("v", InspectionDoneNotifyEvent.class)).thenReturn(event);
+
+            consumer.handleInspectionDone("v");
+
+            verify(houseService).deactivateHouseForUser(event.getTenantId(), event.getHouseId(), false);
+        }
+
+        @Test
+        @DisplayName("skips when houseId/tenantId missing")
+        void missingFields() throws Exception {
+            InspectionDoneNotifyEvent event = new InspectionDoneNotifyEvent();
+            event.setMessageId("m");
+            when(objectMapper.readValue("v", InspectionDoneNotifyEvent.class)).thenReturn(event);
+
+            consumer.handleInspectionDone("v");
+
+            verify(houseService, never()).deactivateHouseForUser(any(), any(), anyBoolean());
+        }
+    }
+
+    @Nested
+    @DisplayName("handleContractDepositExpired")
+    class HandleContractDepositExpired {
+
+        @Test
+        @DisplayName("releases house on happy path")
+        void happyPath() throws Exception {
+            UUID tenantId = UUID.randomUUID();
+            UUID houseId = UUID.randomUUID();
+            ContractDepositExpiredEvent event = new ContractDepositExpiredEvent();
+            event.setMessageId(UUID.randomUUID().toString());
+            event.setContractId(UUID.randomUUID());
+            event.setHouseId(houseId);
+            event.setTenantId(tenantId);
+            when(objectMapper.readValue("payload", ContractDepositExpiredEvent.class))
+                    .thenReturn(event);
+
+            consumer.handleContractDepositExpired("payload");
+
+            verify(houseService).deactivateHouseForUser(tenantId, houseId, false);
+        }
+
+        @Test
+        @DisplayName("swallows null payload")
+        void nullPayload() {
+            consumer.handleContractDepositExpired(null);
+            verifyNoInteractions(houseService);
+        }
+
+        @Test
+        @DisplayName("rethrows on downstream service failure")
+        void downstreamFails() throws Exception {
+            UUID tenantId = UUID.randomUUID();
+            UUID houseId = UUID.randomUUID();
+            ContractDepositExpiredEvent event = new ContractDepositExpiredEvent();
+            event.setMessageId("m");
+            event.setHouseId(houseId);
+            event.setTenantId(tenantId);
+            when(objectMapper.readValue("payload", ContractDepositExpiredEvent.class))
+                    .thenReturn(event);
+            doThrow(new RuntimeException("house service down"))
+                    .when(houseService).deactivateHouseForUser(eq(tenantId), eq(houseId), eq(false));
+
+            assertThatThrownBy(() -> consumer.handleContractDepositExpired("payload"))
+                    .isInstanceOf(RuntimeException.class);
         }
     }
 }
