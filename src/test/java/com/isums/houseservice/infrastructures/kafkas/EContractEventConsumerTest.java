@@ -1,6 +1,7 @@
 package com.isums.houseservice.infrastructures.kafkas;
 
 import com.isums.houseservice.domains.events.ContractDepositExpiredEvent;
+import com.isums.houseservice.domains.events.ContractReplacedEvent;
 import com.isums.houseservice.domains.events.ContractTerminatedEvent;
 import com.isums.houseservice.domains.events.MapUserToHouseEvent;
 import com.isums.houseservice.infrastructures.abstracts.HouseService;
@@ -198,6 +199,119 @@ class EContractEventConsumerTest {
 
             assertThatThrownBy(() -> consumer.handleContractDepositExpired("payload"))
                     .isInstanceOf(RuntimeException.class);
+        }
+    }
+
+    @Nested
+    @DisplayName("handleContractReplaced (đổi nhà)")
+    class HandleContractReplaced {
+
+        private final ConsumerRecord<String, String> rec =
+                new ConsumerRecord<>("contract.replaced", 0, 0L, "k", "v");
+
+        private ContractReplacedEvent event(boolean keepUnavailable) {
+            ContractReplacedEvent e = new ContractReplacedEvent();
+            e.setMessageId(UUID.randomUUID().toString());
+            e.setOldContractId(UUID.randomUUID());
+            e.setNewContractId(UUID.randomUUID());
+            e.setOldHouseId(UUID.randomUUID());
+            e.setNewHouseId(UUID.randomUUID());
+            e.setTenantId(UUID.randomUUID());
+            e.setKeepHouseUnavailable(keepUnavailable);
+            e.setDepositHandling("TRANSFER_TO_REPLACEMENT");
+            e.setTransferredDepositAmount(5_000_000L);
+            e.setReason("Tenant upgrade");
+            e.setReplacedAt(Instant.now());
+            return e;
+        }
+
+        @Test
+        @DisplayName("tenant-upgrade (keepUnavailable=false) — releases old house back to marketplace")
+        void tenantUpgradeReleasesHouse() throws Exception {
+            ContractReplacedEvent evt = event(false);
+            when(objectMapper.readValue("v", ContractReplacedEvent.class)).thenReturn(evt);
+
+            consumer.handleContractReplaced(rec, ack);
+
+            verify(houseService).deactivateHouseForUser(evt.getTenantId(), evt.getOldHouseId(), false);
+            verify(ack).acknowledge();
+        }
+
+        @Test
+        @DisplayName("landlord-fault (keepUnavailable=true) — locks old house out of marketplace")
+        void landlordFaultLocksHouse() throws Exception {
+            ContractReplacedEvent evt = event(true);
+            when(objectMapper.readValue("v", ContractReplacedEvent.class)).thenReturn(evt);
+
+            consumer.handleContractReplaced(rec, ack);
+
+            verify(houseService).deactivateHouseForUser(evt.getTenantId(), evt.getOldHouseId(), true);
+            verify(ack).acknowledge();
+        }
+
+        @Test
+        @DisplayName("missing oldHouseId — skips processing + acks (won't pin partition)")
+        void missingOldHouseIdSkips() throws Exception {
+            ContractReplacedEvent evt = event(false);
+            evt.setOldHouseId(null);
+            when(objectMapper.readValue("v", ContractReplacedEvent.class)).thenReturn(evt);
+
+            consumer.handleContractReplaced(rec, ack);
+
+            verify(houseService, never()).deactivateHouseForUser(any(), any(), anyBoolean());
+            verify(ack).acknowledge();
+        }
+
+        @Test
+        @DisplayName("missing tenantId — skips processing + acks")
+        void missingTenantIdSkips() throws Exception {
+            ContractReplacedEvent evt = event(false);
+            evt.setTenantId(null);
+            when(objectMapper.readValue("v", ContractReplacedEvent.class)).thenReturn(evt);
+
+            consumer.handleContractReplaced(rec, ack);
+
+            verify(houseService, never()).deactivateHouseForUser(any(), any(), anyBoolean());
+            verify(ack).acknowledge();
+        }
+
+        @Test
+        @DisplayName("swallows JacksonException on poison-pill (acks, no retry)")
+        void poisonPillAcked() throws Exception {
+            when(objectMapper.readValue(any(String.class), eq(ContractReplacedEvent.class)))
+                    .thenThrow(new JacksonException("bad json") {});
+
+            consumer.handleContractReplaced(rec, ack);
+
+            verify(ack).acknowledge();
+            verifyNoInteractions(houseService);
+        }
+
+        @Test
+        @DisplayName("rethrows on downstream service failure (so Kafka retries)")
+        void downstreamFailureRetries() throws Exception {
+            ContractReplacedEvent evt = event(false);
+            when(objectMapper.readValue("v", ContractReplacedEvent.class)).thenReturn(evt);
+            doThrow(new RuntimeException("house service down"))
+                    .when(houseService).deactivateHouseForUser(any(), any(), anyBoolean());
+
+            assertThatThrownBy(() -> consumer.handleContractReplaced(rec, ack))
+                    .isInstanceOf(RuntimeException.class);
+            verify(ack, never()).acknowledge();
+        }
+
+        @Test
+        @DisplayName("replay (idempotency by downstream): listener acks both invocations — dedup is downstream's job")
+        void replayBothAcked() throws Exception {
+            ContractReplacedEvent evt = event(false);
+            when(objectMapper.readValue("v", ContractReplacedEvent.class)).thenReturn(evt);
+
+            consumer.handleContractReplaced(rec, ack);
+            consumer.handleContractReplaced(rec, ack);
+
+            verify(houseService, org.mockito.Mockito.times(2))
+                    .deactivateHouseForUser(evt.getTenantId(), evt.getOldHouseId(), false);
+            verify(ack, org.mockito.Mockito.times(2)).acknowledge();
         }
     }
 }
