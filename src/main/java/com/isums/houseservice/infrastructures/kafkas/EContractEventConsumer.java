@@ -19,7 +19,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 public class EContractEventConsumer {
 
-    private static final String GROUP = "house-group-v2";
+    private static final String GROUP = "house-group";
 
     private final HouseService houseService;
     private final ObjectMapper objectMapper;
