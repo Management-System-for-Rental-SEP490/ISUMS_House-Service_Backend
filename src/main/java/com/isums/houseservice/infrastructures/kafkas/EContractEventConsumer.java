@@ -1,5 +1,7 @@
 package com.isums.houseservice.infrastructures.kafkas;
 
+import com.fasterxml.jackson.core.JacksonException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.isums.houseservice.domains.events.ContractCancelledByTenantEvent;
 import com.isums.houseservice.domains.events.ContractDepositExpiredEvent;
 import com.isums.houseservice.domains.events.ContractReplacedEvent;
@@ -9,189 +11,189 @@ import com.isums.houseservice.domains.events.MapUserToHouseEvent;
 import com.isums.houseservice.infrastructures.abstracts.HouseService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Component;
-import tools.jackson.databind.ObjectMapper;
 
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class EContractEventConsumer {
 
+    private static final String GROUP = "house-group";
+
     private final HouseService houseService;
     private final ObjectMapper objectMapper;
-    private final com.fasterxml.jackson.databind.ObjectMapper jackson2Mapper;
 
-    @KafkaListener(topics = "map-user-to-house-topic", groupId = "house-group")
-    public void handleMapUserToHouse(ConsumerRecord<String, String> record, Acknowledgment ack) {
-        log.info("[KAFKA] map-user-to-house received partition={} offset={}",
-                record.partition(), record.offset());
+    @KafkaListener(topics = "map-user-to-house-topic", groupId = GROUP,
+            properties = {"auto.offset.reset:earliest"})
+    public void handleMapUserToHouse(String payload) {
+        log.info("[KAFKA] map-user-to-house ENTRY len={}", payload != null ? payload.length() : -1);
+        if (payload == null) {
+            log.error("[KAFKA] map-user-to-house null payload, skipping");
+            return;
+        }
+        MapUserToHouseEvent event;
         try {
-            MapUserToHouseEvent event = objectMapper.readValue(record.value(), MapUserToHouseEvent.class);
-            log.info("[KAFKA] map-user-to-house parsed userId={} houseId={} handoverDate={}",
-                    event.getUserId(), event.getHouseId(), event.getHandoverDate());
+            event = objectMapper.readValue(payload, MapUserToHouseEvent.class);
+        } catch (JacksonException e) {
+            log.error("[KAFKA] map-user-to-house deserialize failed raw={}: {}", payload, e.getMessage());
+            return;
+        }
+        try {
             houseService.activeHouseForUser(event.getUserId(), event.getHouseId(), event.getHandoverDate());
             log.info("[KAFKA] Mapped userId={} houseId={}", event.getUserId(), event.getHouseId());
-            ack.acknowledge();
-        } catch (tools.jackson.core.JacksonException e) {
-            log.error("[KAFKA] Deserialize failed partition={} offset={} raw={}: {}",
-                    record.partition(), record.offset(), record.value(), e.getMessage());
-            ack.acknowledge();
         } catch (Exception e) {
-            log.error("[KAFKA] handleMapUserToHouse failed partition={} offset={}: {}",
-                    record.partition(), record.offset(), e.getMessage(), e);
+            log.warn("[KAFKA] handleMapUserToHouse failed userId={} houseId={} - will retry: {}",
+                    event.getUserId(), event.getHouseId(), e.getMessage());
             throw new RuntimeException(e);
         }
     }
 
-    @KafkaListener(topics = "contract.terminated", groupId = "house-group")
-    public void handleContractTerminated(
-            ConsumerRecord<String, String> record, Acknowledgment ack) {
+    @KafkaListener(topics = "contract.terminated", groupId = GROUP,
+            properties = {"auto.offset.reset:earliest"})
+    public void handleContractTerminated(String payload) {
+        log.info("[KAFKA] contract.terminated ENTRY len={}", payload != null ? payload.length() : -1);
+        if (payload == null) return;
+        ContractTerminatedEvent event;
         try {
-            ContractTerminatedEvent event = objectMapper.readValue(record.value(), ContractTerminatedEvent.class);
-
+            event = objectMapper.readValue(payload, ContractTerminatedEvent.class);
+        } catch (JacksonException e) {
+            log.error("[KAFKA] contract.terminated deserialize failed raw={}: {}", payload, e.getMessage());
+            return;
+        }
+        try {
             houseService.deactivateHouseForUser(event.getTenantId(), event.getHouseId(), false);
-
-            ack.acknowledge();
             log.info("[KAFKA] Contract terminated houseId={} tenantId={}",
                     event.getHouseId(), event.getTenantId());
         } catch (Exception e) {
-            log.error("[KAFKA] handleContractTerminated failed: {}", e.getMessage(), e);
+            log.warn("[KAFKA] handleContractTerminated failed - will retry: {}", e.getMessage());
             throw new RuntimeException(e);
         }
     }
 
-    @KafkaListener(topics = "contract.replaced", groupId = "house-group")
-    public void handleContractReplaced(
-            ConsumerRecord<String, String> record, Acknowledgment ack) {
+    @KafkaListener(topics = "contract.replaced", groupId = GROUP,
+            properties = {"auto.offset.reset:earliest"})
+    public void handleContractReplaced(String payload) {
+        log.info("[KAFKA] contract.replaced ENTRY len={}", payload != null ? payload.length() : -1);
+        if (payload == null) return;
+        ContractReplacedEvent event;
         try {
-            ContractReplacedEvent event = objectMapper.readValue(record.value(), ContractReplacedEvent.class);
+            event = objectMapper.readValue(payload, ContractReplacedEvent.class);
+        } catch (JacksonException e) {
+            log.error("[KAFKA] contract.replaced deserialize failed raw={}: {}", payload, e.getMessage());
+            return;
+        }
+        if (event.getOldHouseId() == null || event.getTenantId() == null) {
+            log.warn("[KAFKA] contract.replaced missing oldHouseId/tenantId msgId={} oldHouseId={} tenantId={}",
+                    event.getMessageId(), event.getOldHouseId(), event.getTenantId());
+            return;
+        }
+        log.info("[KAFKA] contract.replaced received msgId={} oldContractId={} oldHouseId={} tenantId={} keepUnavailable={} reason={}",
+                event.getMessageId(), event.getOldContractId(), event.getOldHouseId(),
+                event.getTenantId(), event.isKeepHouseUnavailable(), event.getReason());
 
-            if (event.getOldHouseId() == null || event.getTenantId() == null) {
-                log.warn("[KAFKA] contract.replaced missing oldHouseId/tenantId msgId={} oldHouseId={} tenantId={}",
-                        event.getMessageId(), event.getOldHouseId(), event.getTenantId());
-                ack.acknowledge();
-                return;
-            }
-
-            log.info("[KAFKA] contract.replaced received msgId={} oldContractId={} oldHouseId={} tenantId={} keepUnavailable={} reason={}",
-                    event.getMessageId(), event.getOldContractId(), event.getOldHouseId(),
-                    event.getTenantId(), event.isKeepHouseUnavailable(), event.getReason());
-
+        try {
             houseService.deactivateHouseForUser(
                     event.getTenantId(),
                     event.getOldHouseId(),
                     event.isKeepHouseUnavailable());
-
             log.info("[KAFKA] contract.replaced processed msgId={} oldHouseId={}",
                     event.getMessageId(), event.getOldHouseId());
-            ack.acknowledge();
-        } catch (tools.jackson.core.JacksonException e) {
-            log.error("[KAFKA] contract.replaced deserialize failed partition={} offset={} raw={}: {}",
-                    record.partition(), record.offset(), record.value(), e.getMessage());
-            ack.acknowledge();
         } catch (Exception e) {
-            log.error("[KAFKA] handleContractReplaced failed partition={} offset={}: {}",
-                    record.partition(), record.offset(), e.getMessage(), e);
+            log.warn("[KAFKA] handleContractReplaced failed msgId={} - will retry: {}",
+                    event.getMessageId(), e.getMessage());
             throw new RuntimeException(e);
         }
     }
 
-    @KafkaListener(topics = "contract.cancelled-by-tenant", groupId = "house-group")
-    public void handleContractCancelledByTenant(
-            ConsumerRecord<String, String> record, Acknowledgment ack) {
+    @KafkaListener(topics = "contract.cancelled-by-tenant", groupId = GROUP,
+            properties = {"auto.offset.reset:earliest"})
+    public void handleContractCancelledByTenant(String payload) {
+        log.info("[KAFKA] contract.cancelled-by-tenant ENTRY len={}", payload != null ? payload.length() : -1);
+        if (payload == null) return;
+        ContractCancelledByTenantEvent event;
         try {
-            ContractCancelledByTenantEvent event = objectMapper.readValue(
-                    record.value(), ContractCancelledByTenantEvent.class);
-
-            if (event.getHouseId() != null && event.getTenantId() != null) {
-                houseService.deactivateHouseForUser(
-                        event.getTenantId(),
-                        event.getHouseId(),
-                        false);
-            }
-
-            ack.acknowledge();
+            event = objectMapper.readValue(payload, ContractCancelledByTenantEvent.class);
+        } catch (JacksonException e) {
+            log.error("[KAFKA] contract.cancelled-by-tenant deserialize failed raw={}: {}",
+                    payload, e.getMessage());
+            return;
+        }
+        if (event.getHouseId() == null || event.getTenantId() == null) {
+            log.warn("[KAFKA] contract.cancelled-by-tenant missing houseId/tenantId, skip");
+            return;
+        }
+        try {
+            houseService.deactivateHouseForUser(event.getTenantId(), event.getHouseId(), false);
             log.info("[KAFKA] Contract cancelled by tenant houseId={} tenantId={}",
                     event.getHouseId(), event.getTenantId());
         } catch (Exception e) {
-            log.error("[KAFKA] handleContractCancelledByTenant failed: {}", e.getMessage(), e);
+            log.warn("[KAFKA] handleContractCancelledByTenant failed - will retry: {}", e.getMessage());
             throw new RuntimeException(e);
         }
     }
 
-    @KafkaListener(topics = "contract.inspection.done", groupId = "house-group")
-    public void handleInspectionDone(
-            ConsumerRecord<String, String> record, Acknowledgment ack) {
+    @KafkaListener(topics = "contract.inspection.done", groupId = GROUP,
+            properties = {"auto.offset.reset:earliest"})
+    public void handleInspectionDone(String payload) {
+        log.info("[KAFKA] contract.inspection.done ENTRY len={}", payload != null ? payload.length() : -1);
+        if (payload == null) return;
+        InspectionDoneNotifyEvent event;
         try {
-            InspectionDoneNotifyEvent event = objectMapper.readValue(
-                    record.value(), InspectionDoneNotifyEvent.class);
-
-            if (event.getHouseId() == null || event.getTenantId() == null) {
-                log.warn("[KAFKA] contract.inspection.done missing houseId/tenantId msgId={}",
-                        event.getMessageId());
-                ack.acknowledge();
-                return;
-            }
-
-            log.info("[KAFKA] contract.inspection.done received msgId={} contractId={} houseId={} tenantId={}",
-                    event.getMessageId(), event.getContractId(), event.getHouseId(), event.getTenantId());
-
-            houseService.deactivateHouseForUser(
-                    event.getTenantId(),
-                    event.getHouseId(),
-                    false);
-
-            ack.acknowledge();
+            event = objectMapper.readValue(payload, InspectionDoneNotifyEvent.class);
+        } catch (JacksonException e) {
+            log.error("[KAFKA] contract.inspection.done deserialize failed raw={}: {}",
+                    payload, e.getMessage());
+            return;
+        }
+        if (event.getHouseId() == null || event.getTenantId() == null) {
+            log.warn("[KAFKA] contract.inspection.done missing houseId/tenantId msgId={}",
+                    event.getMessageId());
+            return;
+        }
+        log.info("[KAFKA] contract.inspection.done received msgId={} contractId={} houseId={} tenantId={}",
+                event.getMessageId(), event.getContractId(), event.getHouseId(), event.getTenantId());
+        try {
+            houseService.deactivateHouseForUser(event.getTenantId(), event.getHouseId(), false);
             log.info("[KAFKA] contract.inspection.done processed msgId={} houseId={}",
                     event.getMessageId(), event.getHouseId());
-        } catch (tools.jackson.core.JacksonException e) {
-            log.error("[KAFKA] contract.inspection.done deserialize failed raw={}: {}",
-                    record.value(), e.getMessage());
-            ack.acknowledge();
         } catch (Exception e) {
-            log.error("[KAFKA] handleInspectionDone failed: {}", e.getMessage(), e);
+            log.warn("[KAFKA] handleInspectionDone failed msgId={} - will retry: {}",
+                    event.getMessageId(), e.getMessage());
             throw new RuntimeException(e);
         }
     }
 
-    @KafkaListener(topics = "contract.deposit-expired", groupId = "house-group-v2",
+    @KafkaListener(topics = "contract.deposit-expired", groupId = GROUP,
             properties = {"auto.offset.reset:earliest"})
     public void handleContractDepositExpired(String payload) {
-        log.info("[KAFKA] contract.deposit-expired ENTRY len={}",
-                payload != null ? payload.length() : -1);
+        log.info("[KAFKA] contract.deposit-expired ENTRY len={}", payload != null ? payload.length() : -1);
+        if (payload == null) {
+            log.error("[KAFKA] contract.deposit-expired null payload, skipping");
+            return;
+        }
+        ContractDepositExpiredEvent event;
         try {
-            if (payload == null) {
-                log.error("[KAFKA] contract.deposit-expired null payload, skipping");
-                return;
-            }
-            ContractDepositExpiredEvent event = jackson2Mapper.readValue(
-                    payload, ContractDepositExpiredEvent.class);
-
-            if (event.getHouseId() == null || event.getTenantId() == null) {
-                log.warn("[KAFKA] contract.deposit-expired missing houseId/tenantId msgId={} contractId={}",
-                        event.getMessageId(), event.getContractId());
-                return;
-            }
-
-            log.info("[KAFKA] contract.deposit-expired received msgId={} contractId={} houseId={} tenantId={}",
-                    event.getMessageId(), event.getContractId(),
-                    event.getHouseId(), event.getTenantId());
-
-            houseService.deactivateHouseForUser(
-                    event.getTenantId(),
-                    event.getHouseId(),
-                    false);
-
-            log.info("[KAFKA] contract.deposit-expired processed msgId={} houseId={} -> released",
-                    event.getMessageId(), event.getHouseId());
-        } catch (com.fasterxml.jackson.core.JacksonException e) {
+            event = objectMapper.readValue(payload, ContractDepositExpiredEvent.class);
+        } catch (JacksonException e) {
             log.error("[KAFKA] contract.deposit-expired deserialize failed raw={}: {}",
                     payload, e.getMessage());
+            return;
+        }
+        if (event.getHouseId() == null || event.getTenantId() == null) {
+            log.warn("[KAFKA] contract.deposit-expired missing houseId/tenantId msgId={} contractId={}",
+                    event.getMessageId(), event.getContractId());
+            return;
+        }
+        log.info("[KAFKA] contract.deposit-expired received msgId={} contractId={} houseId={} tenantId={}",
+                event.getMessageId(), event.getContractId(),
+                event.getHouseId(), event.getTenantId());
+        try {
+            houseService.deactivateHouseForUser(event.getTenantId(), event.getHouseId(), false);
+            log.info("[KAFKA] contract.deposit-expired processed msgId={} houseId={} -> released",
+                    event.getMessageId(), event.getHouseId());
         } catch (Exception e) {
-            log.error("[KAFKA] handleContractDepositExpired failed: {}", e.getMessage(), e);
+            log.warn("[KAFKA] handleContractDepositExpired failed - will retry: {}", e.getMessage());
             throw new RuntimeException(e);
         }
     }
