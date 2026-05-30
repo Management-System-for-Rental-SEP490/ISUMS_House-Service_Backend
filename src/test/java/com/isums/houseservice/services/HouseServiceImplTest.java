@@ -19,6 +19,7 @@ import com.isums.houseservice.infrastructures.clients.HouseHistoryRestClient;
 import com.isums.houseservice.infrastructures.grpcs.PaymentGrpcClient;
 import com.isums.houseservice.infrastructures.grpcs.UserClientsGrpc;
 import com.isums.houseservice.infrastructures.kafkas.HouseEventProducer;
+import com.isums.houseservice.infrastructures.kafkas.HouseSubscriptionNotifier;
 import com.isums.houseservice.infrastructures.mappers.HouseMapper;
 import com.isums.houseservice.infrastructures.repositories.*;
 import com.isums.userservice.grpc.UserResponse;
@@ -87,6 +88,7 @@ class HouseServiceImplTest {
     @Mock private TenantMemberRepository   tenantMemberRepository;
     @Mock private CachedPageService        cachedPageService;
     @Mock private TranslationAutoFillService translationAutoFillService;
+    @Mock private HouseSubscriptionNotifier subscriptionNotifier;
 
     @InjectMocks
     private HouseServiceImpl houseService;
@@ -658,7 +660,7 @@ class HouseServiceImplTest {
                     .houseId(houseId)
                     .isActive(false)
                     .build();
-            given(tenantGroupRepository.findByHouseId(houseId)).willReturn(Optional.empty());
+            given(tenantGroupRepository.findAllByHouseId(houseId)).willReturn(List.of());
             given(tenantGroupRepository.save(any(TenantGroup.class))).willReturn(pendingGroup);
 
             TenantMemberId memberId = new TenantMemberId();
@@ -690,7 +692,7 @@ class HouseServiceImplTest {
                     .build();
 
             given(houseRepository.findById(houseId)).willReturn(Optional.of(house));
-            given(tenantGroupRepository.findByHouseId(houseId)).willReturn(Optional.of(existingInactive));
+            given(tenantGroupRepository.findAllByHouseId(houseId)).willReturn(List.of(existingInactive));
             given(tenantMemberRepository.existsById(any(TenantMemberId.class))).willReturn(false);
 
             houseService.activeHouseForUser(userId, houseId, futureHandover);
@@ -715,7 +717,7 @@ class HouseServiceImplTest {
                     .build();
 
             given(houseRepository.findById(houseId)).willReturn(Optional.of(house));
-            given(tenantGroupRepository.findByHouseId(houseId)).willReturn(Optional.of(existingInactive));
+            given(tenantGroupRepository.findAllByHouseId(houseId)).willReturn(List.of(existingInactive));
             given(tenantMemberRepository.existsById(any(TenantMemberId.class))).willReturn(true);
 
             houseService.activeHouseForUser(userId, houseId, futureHandover);
@@ -742,8 +744,8 @@ class HouseServiceImplTest {
                     .build();
 
             given(houseRepository.findById(houseId)).willReturn(Optional.of(house));
-            given(tenantGroupRepository.findByHouseIdAndIsActiveTrue(houseId))
-                    .willReturn(Optional.empty());
+            given(tenantGroupRepository.findAllByHouseIdAndIsActiveTrue(houseId))
+                    .willReturn(List.of());
             given(tenantGroupRepository.save(any(TenantGroup.class))).willReturn(activeGroup);
             given(tenantMemberRepository.existsById(any(TenantMemberId.class))).willReturn(false);
 
@@ -757,6 +759,38 @@ class HouseServiceImplTest {
             assertThat(saved.getHandoverDate()).isEqualTo(handoverDate);
             assertThat(saved.getNextTenantId()).isNull();
             assertThat(saved.getNextHandoverDate()).isNull();
+        }
+
+        @Test
+        @DisplayName("should heal duplicate active TenantGroups instead of blocking activation")
+        void activeHouseForUser_duplicateActiveTenantGroups_healsAndActivates() {
+            house.setUserRentalId(null);
+            house.setStatus(HouseStatus.AVAILABLE);
+            house.setHandoverDate(null);
+            house.setTenantGroupId(null);
+
+            TenantGroup duplicateOne = TenantGroup.builder()
+                    .id(UUID.randomUUID()).houseId(houseId).isActive(true).build();
+            TenantGroup duplicateTwo = TenantGroup.builder()
+                    .id(UUID.randomUUID()).houseId(houseId).isActive(true).build();
+            TenantGroup newGroup = TenantGroup.builder()
+                    .id(UUID.randomUUID()).houseId(houseId).isActive(true).build();
+
+            given(houseRepository.findById(houseId)).willReturn(Optional.of(house));
+            given(tenantGroupRepository.findAllByHouseIdAndIsActiveTrue(houseId))
+                    .willReturn(List.of(duplicateOne, duplicateTwo));
+            given(tenantMemberRepository.existsByTenantGroupIdAndUserId(any(), eq(userId)))
+                    .willReturn(false);
+            given(tenantGroupRepository.save(any(TenantGroup.class))).willReturn(newGroup);
+            given(tenantMemberRepository.existsById(any(TenantMemberId.class))).willReturn(false);
+
+            houseService.activeHouseForUser(userId, houseId, Instant.now());
+
+            assertThat(duplicateOne.isActive()).isFalse();
+            assertThat(duplicateTwo.isActive()).isFalse();
+            assertThat(house.getTenantGroupId()).isEqualTo(newGroup.getId());
+            assertThat(house.getUserRentalId()).isEqualTo(userId);
+            assertThat(house.getStatus()).isEqualTo(HouseStatus.RENTED);
         }
 
         @Test
@@ -777,8 +811,8 @@ class HouseServiceImplTest {
 
             given(houseRepository.findById(houseId)).willReturn(Optional.of(house));
             given(tenantGroupRepository.findById(oldGroupId)).willReturn(Optional.of(oldGroup));
-            given(tenantGroupRepository.findByHouseIdAndIsActiveTrue(houseId))
-                    .willReturn(Optional.empty());
+            given(tenantGroupRepository.findAllByHouseIdAndIsActiveTrue(houseId))
+                    .willReturn(List.of());
             given(tenantGroupRepository.save(any(TenantGroup.class))).willReturn(newGroup);
             given(tenantMemberRepository.existsById(any(TenantMemberId.class))).willReturn(false);
 
@@ -1014,6 +1048,7 @@ class HouseServiceImplTest {
             house.setStatus(HouseStatus.RENTED);
 
             given(houseRepository.findById(houseId)).willReturn(Optional.of(house));
+            given(tenantGroupRepository.findAllByHouseIdAndIsActiveTrue(houseId)).willReturn(List.of());
 
             houseService.deactivateHouseForUser(userId, houseId, false);
 
@@ -1039,6 +1074,7 @@ class HouseServiceImplTest {
             house.setStatus(HouseStatus.RENTED);
 
             given(houseRepository.findById(houseId)).willReturn(Optional.of(house));
+            given(tenantGroupRepository.findAllByHouseIdAndIsActiveTrue(houseId)).willReturn(List.of());
 
             houseService.deactivateHouseForUser(userId, houseId, false);
 
@@ -1055,6 +1091,7 @@ class HouseServiceImplTest {
             house.setUserRentalId(userId);
             house.setStatus(HouseStatus.RENTED);
             given(houseRepository.findById(houseId)).willReturn(Optional.of(house));
+            given(tenantGroupRepository.findAllByHouseIdAndIsActiveTrue(houseId)).willReturn(List.of());
 
             houseService.deactivateHouseForUser(userId, houseId, true);
 

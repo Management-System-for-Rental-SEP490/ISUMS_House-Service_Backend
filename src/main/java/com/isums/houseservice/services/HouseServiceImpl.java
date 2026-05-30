@@ -437,7 +437,7 @@ public class HouseServiceImpl implements HouseService {
             return;
         }
 
-        tenantGroupRepository.findByHouseIdAndIsActiveTrue(houseId).ifPresent(group -> {
+        for (TenantGroup group : tenantGroupRepository.findAllByHouseIdAndIsActiveTrue(houseId)) {
             for (TenantMember m : tenantMemberRepository.findByTenantGroupId(group.getId())) {
                 if (m.isActive()) {
                     m.setActive(false);
@@ -447,7 +447,7 @@ public class HouseServiceImpl implements HouseService {
             group.setActive(false);
             tenantGroupRepository.save(group);
             log.info("[House] Deactivated tenantGroupId={} houseId={}", group.getId(), houseId);
-        });
+        }
 
         house.setUserRentalId(null);
         house.setTenantGroupId(null);
@@ -563,8 +563,9 @@ public class HouseServiceImpl implements HouseService {
     }
 
     private void createPendingTenantGroup(UUID userId, UUID houseId) {
-        TenantGroup group = tenantGroupRepository.findByHouseId(houseId)
+        TenantGroup group = tenantGroupRepository.findAllByHouseId(houseId).stream()
                 .filter(g -> !g.isActive())
+                .findFirst()
                 .orElseGet(() -> tenantGroupRepository.save(TenantGroup.builder()
                         .houseId(houseId)
                         .isActive(false)
@@ -596,12 +597,7 @@ public class HouseServiceImpl implements HouseService {
             });
         }
 
-        TenantGroup group = tenantGroupRepository.findByHouseIdAndIsActiveTrue(house.getId())
-                .filter(g -> tenantMemberRepository.existsByTenantGroupIdAndUserId(g.getId(), userId))
-                .orElseGet(() -> tenantGroupRepository.save(TenantGroup.builder()
-                        .houseId(house.getId())
-                        .isActive(true)
-                        .build()));
+        TenantGroup group = resolveActiveTenantGroupForActivation(house.getId(), userId);
 
         TenantMemberId memberId = new TenantMemberId();
         memberId.setTenantId(group.getId());
@@ -626,6 +622,33 @@ public class HouseServiceImpl implements HouseService {
         cachedPageService.evictAll(PAGE_NS);
 
         log.info("[House] Activated houseId={} ownerId={}", house.getId(), userId);
+    }
+
+    private TenantGroup resolveActiveTenantGroupForActivation(UUID houseId, UUID userId) {
+        List<TenantGroup> activeGroups = tenantGroupRepository.findAllByHouseIdAndIsActiveTrue(houseId);
+
+        TenantGroup selected = activeGroups.stream()
+                .filter(g -> tenantMemberRepository.existsByTenantGroupIdAndUserId(g.getId(), userId))
+                .findFirst()
+                .orElse(null);
+
+        for (TenantGroup group : activeGroups) {
+            if (selected == null || !group.getId().equals(selected.getId())) {
+                group.setActive(false);
+                tenantGroupRepository.save(group);
+                log.warn("[House] Deactivated duplicate active tenantGroupId={} houseId={}",
+                        group.getId(), houseId);
+            }
+        }
+
+        if (selected != null) {
+            return selected;
+        }
+
+        return tenantGroupRepository.save(TenantGroup.builder()
+                .houseId(houseId)
+                .isActive(true)
+                .build());
     }
 
     private PageResponse<HouseDto> loadPage(PageRequest request) {
@@ -922,7 +945,7 @@ public class HouseServiceImpl implements HouseService {
 
         for (House oldHouse : currentHouses) {
             if (!oldHouse.getId().equals(newHouseId)) {
-                tenantGroupRepository.findByHouseIdAndIsActiveTrue(oldHouse.getId()).ifPresent(group -> {
+                for (TenantGroup group : tenantGroupRepository.findAllByHouseIdAndIsActiveTrue(oldHouse.getId())) {
                     for (TenantMember m : tenantMemberRepository.findByTenantGroupId(group.getId())) {
                         if (m.isActive()) {
                             m.setActive(false);
@@ -931,7 +954,7 @@ public class HouseServiceImpl implements HouseService {
                     }
                     group.setActive(false);
                     tenantGroupRepository.save(group);
-                });
+                }
 
                 oldHouse.setUserRentalId(null);
                 oldHouse.setTenantGroupId(null);
