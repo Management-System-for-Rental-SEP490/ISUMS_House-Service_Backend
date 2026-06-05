@@ -97,8 +97,16 @@ public class EContractEventConsumer {
                     event.getTenantId(),
                     event.getOldHouseId(),
                     event.isKeepHouseUnavailable());
-            log.info("[KAFKA] contract.replaced processed msgId={} oldHouseId={}",
-                    event.getMessageId(), event.getOldHouseId());
+            if (event.getNewHouseId() != null) {
+                houseService.activeHouseForUser(
+                        event.getTenantId(),
+                        event.getNewHouseId(),
+                        event.getNewHandoverDate() != null
+                                ? event.getNewHandoverDate()
+                                : event.getReplacedAt());
+            }
+            log.info("[KAFKA] contract.replaced processed msgId={} oldHouseId={} newHouseId={}",
+                    event.getMessageId(), event.getOldHouseId(), event.getNewHouseId());
         } catch (Exception e) {
             log.warn("[KAFKA] handleContractReplaced failed msgId={} - will retry: {}",
                     event.getMessageId(), e.getMessage());

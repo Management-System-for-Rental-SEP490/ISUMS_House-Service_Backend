@@ -10,6 +10,10 @@ import java.util.UUID;
 
 public interface TenantMemberRepository extends JpaRepository<TenantMember, TenantMemberId> {
 
+    @Query("""
+        SELECT m FROM TenantMember m
+        WHERE m.id.tenantId = :tenantGroupId
+    """)
     List<TenantMember> findByTenantGroupId(UUID tenantGroupId);
 
     @Query("""

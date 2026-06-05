@@ -13,6 +13,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -25,6 +26,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -156,29 +158,49 @@ class EContractEventConsumerTest {
             e.setTransferredDepositAmount(5_000_000L);
             e.setReason("Tenant upgrade");
             e.setReplacedAt(Instant.now());
+            e.setNewHandoverDate(Instant.now().plusSeconds(3600));
             return e;
         }
 
         @Test
-        @DisplayName("tenant-upgrade (keepUnavailable=false) — releases old house back to marketplace")
-        void tenantUpgradeReleasesHouse() throws Exception {
+        @DisplayName("tenant-upgrade (keepUnavailable=false) — releases old house and maps replacement house")
+        void tenantUpgradeReleasesOldAndMapsNewHouse() throws Exception {
             ContractReplacedEvent evt = event(false);
             when(objectMapper.readValue("v", ContractReplacedEvent.class)).thenReturn(evt);
 
             consumer.handleContractReplaced("v");
 
-            verify(houseService).deactivateHouseForUser(evt.getTenantId(), evt.getOldHouseId(), false);
+            InOrder order = inOrder(houseService);
+            order.verify(houseService).deactivateHouseForUser(evt.getTenantId(), evt.getOldHouseId(), false);
+            order.verify(houseService).activeHouseForUser(
+                    evt.getTenantId(), evt.getNewHouseId(), evt.getNewHandoverDate());
         }
 
         @Test
-        @DisplayName("landlord-fault (keepUnavailable=true) — locks old house out of marketplace")
-        void landlordFaultLocksHouse() throws Exception {
+        @DisplayName("landlord-fault (keepUnavailable=true) — locks old house and maps replacement house")
+        void landlordFaultLocksOldAndMapsNewHouse() throws Exception {
             ContractReplacedEvent evt = event(true);
             when(objectMapper.readValue("v", ContractReplacedEvent.class)).thenReturn(evt);
 
             consumer.handleContractReplaced("v");
 
-            verify(houseService).deactivateHouseForUser(evt.getTenantId(), evt.getOldHouseId(), true);
+            InOrder order = inOrder(houseService);
+            order.verify(houseService).deactivateHouseForUser(evt.getTenantId(), evt.getOldHouseId(), true);
+            order.verify(houseService).activeHouseForUser(
+                    evt.getTenantId(), evt.getNewHouseId(), evt.getNewHandoverDate());
+        }
+
+        @Test
+        @DisplayName("missing newHouseId — only releases old house")
+        void missingNewHouseOnlyReleasesOldHouse() throws Exception {
+            ContractReplacedEvent evt = event(false);
+            evt.setNewHouseId(null);
+            when(objectMapper.readValue("v", ContractReplacedEvent.class)).thenReturn(evt);
+
+            consumer.handleContractReplaced("v");
+
+            verify(houseService).deactivateHouseForUser(evt.getTenantId(), evt.getOldHouseId(), false);
+            verify(houseService, never()).activeHouseForUser(any(), any(), any());
         }
 
         @Test
@@ -239,6 +261,8 @@ class EContractEventConsumerTest {
 
             verify(houseService, org.mockito.Mockito.times(2))
                     .deactivateHouseForUser(evt.getTenantId(), evt.getOldHouseId(), false);
+            verify(houseService, org.mockito.Mockito.times(2))
+                    .activeHouseForUser(evt.getTenantId(), evt.getNewHouseId(), evt.getNewHandoverDate());
         }
     }
 
