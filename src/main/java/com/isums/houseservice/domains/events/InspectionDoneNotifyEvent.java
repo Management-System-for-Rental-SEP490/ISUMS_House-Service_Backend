@@ -6,6 +6,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @Data
@@ -20,5 +21,6 @@ public class InspectionDoneNotifyEvent {
     private UUID houseId;
     private UUID tenantId;
     private Long deductionAmount;
+    private Instant effectiveAt;
     private String messageId;
 }

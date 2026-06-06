@@ -17,10 +17,13 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.net.URI;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -34,13 +37,13 @@ import static org.mockito.Mockito.when;
 class S3ServiceImplTest {
 
     @Mock private S3Client s3Client;
+    @Mock private S3Presigner s3Presigner;
 
     @InjectMocks private S3ServiceImpl service;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         ReflectionTestUtils.setField(service, "bucket", "test-bucket");
-        ReflectionTestUtils.setField(service, "cloudFrontDomain", "cdn.example.com");
     }
 
     @Nested
@@ -128,10 +131,18 @@ class S3ServiceImplTest {
     class GetImageUrl {
 
         @Test
-        @DisplayName("builds cloudfront-prefixed URL")
-        void buildsUrl() {
+        @DisplayName("returns an S3 presigned URL")
+        void buildsUrl() throws Exception {
+            PresignedGetObjectRequest presigned = org.mockito.Mockito.mock(
+                    PresignedGetObjectRequest.class);
+            when(s3Presigner.presignGetObject(
+                    any(software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest.class)))
+                    .thenReturn(presigned);
+            when(presigned.url()).thenReturn(
+                    URI.create("https://signed.example.com/media/x/img.jpg").toURL());
+
             assertThat(service.getImageUrl("media/x/img.jpg"))
-                    .isEqualTo("https://cdn.example.com/media/x/img.jpg");
+                    .isEqualTo("https://signed.example.com/media/x/img.jpg");
         }
     }
 

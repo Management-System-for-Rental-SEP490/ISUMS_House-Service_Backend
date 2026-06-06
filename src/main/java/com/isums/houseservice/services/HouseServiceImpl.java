@@ -255,15 +255,14 @@ public class HouseServiceImpl implements HouseService {
             house.setUpdatedAt(Instant.now());
             houseRepository.save(house);
             cachedPageService.evictAll(PAGE_NS);
+            houseEventProducer.publishTenantChanged(houseId, userId);
             log.info("[House] Re-activated existing tenant userId={} houseId={} handoverDate={}",
                     userId, houseId, handoverDate);
             return;
         }
 
         boolean houseCurrentlyOccupied = house.getUserRentalId() != null
-                && house.getStatus() == HouseStatus.RENTED
-                && house.getHandoverDate() != null
-                && Instant.now().isBefore(house.getHandoverDate().plus(contractEndBuffer()));
+                && house.getStatus() == HouseStatus.RENTED;
 
         if (houseCurrentlyOccupied && handoverDate != null && handoverDate.isAfter(Instant.now())) {
             house.setNextTenantId(userId);
@@ -310,8 +309,7 @@ public class HouseServiceImpl implements HouseService {
                         h -> paymentGrpcClient.getInvoiceStatus(h.getId(), userId)));
 
         return houses.stream().map(house -> {
-            boolean isPendingNext = userId.equals(house.getNextTenantId())
-                    && !userId.equals(house.getUserRentalId());
+            boolean isPendingNext = userId.equals(house.getNextTenantId()) && !userId.equals(house.getUserRentalId());
 
             HouseMemberRole role = userId.equals(house.getUserRentalId())
                     ? HouseMemberRole.OWNER
@@ -427,6 +425,50 @@ public class HouseServiceImpl implements HouseService {
     @Override
     @Transactional
     @CacheEvict(value = "user-house-access", allEntries = true)
+    public void revokeHouseAccessForUser(UUID tenantId, UUID houseId) {
+        House house = houseRepository.findById(houseId)
+                .orElseThrow(() -> new NotFoundException("House not found: " + houseId));
+
+        if (house.getUserRentalId() != null && !tenantId.equals(house.getUserRentalId())) {
+            log.warn("[House] revokeHouseAccessForUser tenantId={} does not match userRentalId={} houseId={}",
+                    tenantId, house.getUserRentalId(), houseId);
+            return;
+        }
+
+        for (TenantGroup group : tenantGroupRepository.findAllByHouseIdAndIsActiveTrue(houseId)) {
+            for (TenantMember m : tenantMemberRepository.findByTenantGroupId(group.getId())) {
+                if (m.isActive()) {
+                    m.setActive(false);
+                    tenantMemberRepository.save(m);
+                }
+            }
+            group.setActive(false);
+            tenantGroupRepository.save(group);
+            log.info("[House] Revoked tenantGroupId={} houseId={}", group.getId(), houseId);
+        }
+
+        boolean hasPendingNextTenant = house.getNextTenantId() != null && !tenantId.equals(house.getNextTenantId());
+
+        house.setUserRentalId(null);
+        house.setTenantGroupId(null);
+        house.setHandoverDate(null);
+        if (tenantId.equals(house.getNextTenantId())) {
+            house.setNextTenantId(null);
+            house.setNextHandoverDate(null);
+        }
+        house.setStatus(hasPendingNextTenant ? HouseStatus.RENTED : HouseStatus.REPAIRED);
+        house.setUpdatedAt(Instant.now());
+        houseRepository.save(house);
+        cachedPageService.evictAll(PAGE_NS);
+        houseEventProducer.publishTenantChanged(houseId, null);
+
+        log.info("[House] Revoked access houseId={} tenantId={} status={}",
+                houseId, tenantId, house.getStatus());
+    }
+
+    @Override
+    @Transactional
+    @CacheEvict(value = "user-house-access", allEntries = true)
     public void deactivateHouseForUser(UUID tenantId, UUID houseId, boolean keepUnavailable) {
         House house = houseRepository.findById(houseId)
                 .orElseThrow(() -> new NotFoundException("House not found: " + houseId));
@@ -452,14 +494,18 @@ public class HouseServiceImpl implements HouseService {
         house.setUserRentalId(null);
         house.setTenantGroupId(null);
         house.setHandoverDate(null);
+        boolean hasPendingNextTenant = house.getNextTenantId() != null && !tenantId.equals(house.getNextTenantId());
         if (tenantId.equals(house.getNextTenantId())) {
             house.setNextTenantId(null);
             house.setNextHandoverDate(null);
         }
-        house.setStatus(keepUnavailable ? HouseStatus.REPAIRED : HouseStatus.AVAILABLE);
+        house.setStatus(keepUnavailable
+                ? HouseStatus.REPAIRED
+                : (hasPendingNextTenant ? HouseStatus.RENTED : HouseStatus.AVAILABLE));
         house.setUpdatedAt(Instant.now());
         houseRepository.save(house);
         cachedPageService.evictAll(PAGE_NS);
+        houseEventProducer.publishTenantChanged(houseId, null);
 
         log.info("[House] Deactivated houseId={} tenantId={} status={}",
                 houseId, tenantId, house.getStatus());
@@ -467,6 +513,70 @@ public class HouseServiceImpl implements HouseService {
         if (house.getStatus() == HouseStatus.AVAILABLE) {
             subscriptionNotifier.notifyAvailable(house);
         }
+    }
+
+    @Override
+    @Transactional
+    @CacheEvict(value = "user-house-access", allEntries = true)
+    public void completeCheckoutAndHandover(
+            UUID oldTenantId,
+            UUID houseId,
+            Instant effectiveAt,
+            boolean demo) {
+        House house = houseRepository.findByIdForUpdate(houseId)
+                .orElseThrow(() -> new NotFoundException("House not found: " + houseId));
+
+        if (house.getUserRentalId() != null
+                && !oldTenantId.equals(house.getUserRentalId())) {
+            log.warn("[House] Checkout tenant mismatch oldTenantId={} currentTenantId={} houseId={}",
+                    oldTenantId, house.getUserRentalId(), houseId);
+            return;
+        }
+
+        for (TenantGroup group : tenantGroupRepository.findAllByHouseIdAndIsActiveTrue(houseId)) {
+            for (TenantMember member : tenantMemberRepository.findByTenantGroupId(group.getId())) {
+                if (member.isActive()) {
+                    member.setActive(false);
+                    tenantMemberRepository.save(member);
+                }
+            }
+            group.setActive(false);
+            tenantGroupRepository.save(group);
+        }
+
+        UUID nextTenantId = house.getNextTenantId();
+        Instant nextHandoverDate = house.getNextHandoverDate();
+        house.setUserRentalId(null);
+        house.setTenantGroupId(null);
+        house.setHandoverDate(null);
+
+        boolean handoverReached = nextTenantId != null
+                && (nextHandoverDate == null || !nextHandoverDate.isAfter(effectiveAt));
+        if (handoverReached) {
+            InvoiceStatusDto payment = paymentGrpcClient.getInvoiceStatus(houseId, nextTenantId);
+            if (payment.depositPaid() && payment.firstRentPaid()) {
+                Instant accessDate = demo ? Instant.now() : nextHandoverDate;
+                activateNow(house, nextTenantId, accessDate);
+                log.info("[House] Checkout completed and next tenant activated houseId={} oldTenant={} nextTenant={} demo={}",
+                        houseId, oldTenantId, nextTenantId, demo);
+                return;
+            }
+            log.info("[House] Next tenant remains pending payment houseId={} nextTenant={} depositPaid={} firstRentPaid={}",
+                    houseId, nextTenantId, payment.depositPaid(), payment.firstRentPaid());
+        }
+
+        boolean hasPendingNext = nextTenantId != null;
+        house.setStatus(hasPendingNext ? HouseStatus.RENTED : HouseStatus.AVAILABLE);
+        house.setUpdatedAt(Instant.now());
+        houseRepository.save(house);
+        cachedPageService.evictAll(PAGE_NS);
+        houseEventProducer.publishTenantChanged(houseId, null);
+
+        if (!hasPendingNext) {
+            subscriptionNotifier.notifyAvailable(house);
+        }
+        log.info("[House] Checkout completed houseId={} oldTenant={} nextTenant={} handoverReached={} status={}",
+                houseId, oldTenantId, nextTenantId, handoverReached, house.getStatus());
     }
 
     @Override
@@ -620,6 +730,7 @@ public class HouseServiceImpl implements HouseService {
         house.setStatus(HouseStatus.RENTED);
         houseRepository.save(house);
         cachedPageService.evictAll(PAGE_NS);
+        houseEventProducer.publishTenantChanged(house.getId(), userId);
 
         log.info("[House] Activated houseId={} ownerId={}", house.getId(), userId);
     }

@@ -38,7 +38,15 @@ public interface HouseService {
 
     List<HouseAccessStatus> getMyHouseAccess(String keycloakId);
 
+    void revokeHouseAccessForUser(UUID tenantId, UUID houseId);
+
     void deactivateHouseForUser(UUID tenantId, UUID houseId, boolean keepUnavailable);
+
+    void completeCheckoutAndHandover(
+            UUID oldTenantId,
+            UUID houseId,
+            Instant effectiveAt,
+            boolean demo);
 
     void setTenantAccessRestriction(UUID tenantId, UUID houseId, boolean restricted);
 

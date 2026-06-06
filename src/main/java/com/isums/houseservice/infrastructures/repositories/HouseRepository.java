@@ -5,6 +5,8 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 
 import java.time.Instant;
 import java.util.List;
@@ -15,6 +17,10 @@ public interface HouseRepository extends JpaRepository<House, UUID>, JpaSpecific
 
     @EntityGraph(attributePaths = "functionalAreas")
     Optional<House> findWithFunctionalAreasById(UUID id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT h FROM House h WHERE h.id = :id")
+    Optional<House> findByIdForUpdate(UUID id);
 
     @Query("SELECT h.region.id FROM House h WHERE h.id = :houseId")
     Optional<UUID> findRegionIdByHouseId(UUID houseId);

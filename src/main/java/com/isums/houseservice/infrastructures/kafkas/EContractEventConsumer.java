@@ -71,6 +71,28 @@ public class EContractEventConsumer {
         }
     }
 
+    @KafkaListener(topics = "contract.access-ended", groupId = GROUP,
+            properties = {"auto.offset.reset:earliest"})
+    public void handleContractAccessEnded(String payload) {
+        log.info("[KAFKA] contract.access-ended ENTRY len={}", payload != null ? payload.length() : -1);
+        if (payload == null) return;
+        ContractTerminatedEvent event;
+        try {
+            event = objectMapper.readValue(payload, ContractTerminatedEvent.class);
+        } catch (JacksonException e) {
+            log.error("[KAFKA] contract.access-ended deserialize failed raw={}: {}", payload, e.getMessage());
+            return;
+        }
+        try {
+            houseService.revokeHouseAccessForUser(event.getTenantId(), event.getHouseId());
+            log.info("[KAFKA] Contract access ended houseId={} tenantId={}",
+                    event.getHouseId(), event.getTenantId());
+        } catch (Exception e) {
+            log.warn("[KAFKA] handleContractAccessEnded failed - will retry: {}", e.getMessage());
+            throw new RuntimeException(e);
+        }
+    }
+
     @KafkaListener(topics = "contract.replaced", groupId = GROUP,
             properties = {"auto.offset.reset:earliest"})
     public void handleContractReplaced(String payload) {
@@ -162,7 +184,12 @@ public class EContractEventConsumer {
         log.info("[KAFKA] contract.inspection.done received msgId={} contractId={} houseId={} tenantId={}",
                 event.getMessageId(), event.getContractId(), event.getHouseId(), event.getTenantId());
         try {
-            houseService.deactivateHouseForUser(event.getTenantId(), event.getHouseId(), false);
+            boolean demo = event.getEffectiveAt() != null;
+            houseService.completeCheckoutAndHandover(
+                    event.getTenantId(),
+                    event.getHouseId(),
+                    demo ? event.getEffectiveAt() : java.time.Instant.now(),
+                    demo);
             log.info("[KAFKA] contract.inspection.done processed msgId={} houseId={}",
                     event.getMessageId(), event.getHouseId());
         } catch (Exception e) {

@@ -6,6 +6,7 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -25,6 +26,18 @@ public class HouseEventProducer {
             kafkaTemplate.send("house.created", houseId.toString(), payload);
         } catch (Exception e) {
             log.warn("[KAFKA] publishHouseCreated failed: {}", e.getMessage());
+        }
+    }
+
+    public void publishTenantChanged(UUID houseId, UUID tenantUserId) {
+        try {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("houseId", houseId.toString());
+            payload.put("tenantUserId", tenantUserId != null ? tenantUserId.toString() : null);
+            payload.put("changedAt", System.currentTimeMillis());
+            kafkaTemplate.send("house.tenant-changed", houseId.toString(), objectMapper.writeValueAsString(payload));
+        } catch (Exception e) {
+            log.warn("[KAFKA] publishTenantChanged failed houseId={}: {}", houseId, e.getMessage());
         }
     }
 }

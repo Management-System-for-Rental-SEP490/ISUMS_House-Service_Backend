@@ -32,7 +32,7 @@ public class PaymentGrpcClient {
                             ? null : UUID.fromString(res.getPendingInvoiceId()));
         } catch (Exception e) {
             log.warn("[gRPC] getInvoiceStatus failed houseId={}: {}", houseId, e.getMessage());
-            return new InvoiceStatusDto(true, true, null); // fallback
+            return new InvoiceStatusDto(false, false, null);
         }
     }
 }

@@ -1083,6 +1083,7 @@ class HouseServiceImplTest {
             House saved = captor.getValue();
             assertThat(saved.getNextTenantId()).isEqualTo(otherTenantId);
             assertThat(saved.getNextHandoverDate()).isEqualTo(nextHandover);
+            assertThat(saved.getStatus()).isEqualTo(HouseStatus.RENTED);
         }
 
         @Test
@@ -1125,6 +1126,92 @@ class HouseServiceImplTest {
                     .hasMessageContaining("House not found");
 
             verify(houseRepository, never()).save(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("completeCheckoutAndHandover")
+    class CompleteCheckoutAndHandoverTests {
+
+        @Test
+        @DisplayName("activates paid next tenant when simulated handover date is reached")
+        void activatesReadyNextTenant() {
+            UUID nextTenantId = UUID.randomUUID();
+            house.setUserRentalId(userId);
+            house.setStatus(HouseStatus.RENTED);
+            house.setNextTenantId(nextTenantId);
+            house.setNextHandoverDate(Instant.parse("2026-08-01T00:00:00Z"));
+
+            given(houseRepository.findByIdForUpdate(houseId)).willReturn(Optional.of(house));
+            given(tenantGroupRepository.findAllByHouseIdAndIsActiveTrue(houseId))
+                    .willReturn(List.of());
+            given(paymentGrpcClient.getInvoiceStatus(houseId, nextTenantId))
+                    .willReturn(new InvoiceStatusDto(true, true, null));
+            given(tenantGroupRepository.save(any(TenantGroup.class)))
+                    .willAnswer(invocation -> {
+                        TenantGroup group = invocation.getArgument(0);
+                        if (group.getId() == null) {
+                            group.setId(UUID.randomUUID());
+                        }
+                        return group;
+                    });
+
+            houseService.completeCheckoutAndHandover(
+                    userId,
+                    houseId,
+                    Instant.parse("2026-08-02T00:00:00Z"),
+                    true);
+
+            assertThat(house.getUserRentalId()).isEqualTo(nextTenantId);
+            assertThat(house.getNextTenantId()).isNull();
+            assertThat(house.getStatus()).isEqualTo(HouseStatus.RENTED);
+            assertThat(house.getHandoverDate()).isBeforeOrEqualTo(Instant.now());
+            verify(houseEventProducer).publishTenantChanged(houseId, nextTenantId);
+        }
+
+        @Test
+        @DisplayName("keeps next tenant pending when first rent is unpaid")
+        void keepsUnpaidNextTenantPending() {
+            UUID nextTenantId = UUID.randomUUID();
+            Instant handover = Instant.parse("2026-08-01T00:00:00Z");
+            house.setUserRentalId(userId);
+            house.setStatus(HouseStatus.RENTED);
+            house.setNextTenantId(nextTenantId);
+            house.setNextHandoverDate(handover);
+
+            given(houseRepository.findByIdForUpdate(houseId)).willReturn(Optional.of(house));
+            given(tenantGroupRepository.findAllByHouseIdAndIsActiveTrue(houseId))
+                    .willReturn(List.of());
+            given(paymentGrpcClient.getInvoiceStatus(houseId, nextTenantId))
+                    .willReturn(new InvoiceStatusDto(true, false, UUID.randomUUID()));
+
+            houseService.completeCheckoutAndHandover(
+                    userId,
+                    houseId,
+                    handover.plusSeconds(1),
+                    true);
+
+            assertThat(house.getUserRentalId()).isNull();
+            assertThat(house.getNextTenantId()).isEqualTo(nextTenantId);
+            assertThat(house.getStatus()).isEqualTo(HouseStatus.RENTED);
+            verify(houseEventProducer).publishTenantChanged(houseId, null);
+        }
+
+        @Test
+        @DisplayName("makes house available when checkout has no next tenant")
+        void makesHouseAvailableWithoutNextTenant() {
+            house.setUserRentalId(userId);
+            house.setStatus(HouseStatus.RENTED);
+            given(houseRepository.findByIdForUpdate(houseId)).willReturn(Optional.of(house));
+            given(tenantGroupRepository.findAllByHouseIdAndIsActiveTrue(houseId))
+                    .willReturn(List.of());
+
+            houseService.completeCheckoutAndHandover(
+                    userId, houseId, Instant.now(), false);
+
+            assertThat(house.getUserRentalId()).isNull();
+            assertThat(house.getStatus()).isEqualTo(HouseStatus.AVAILABLE);
+            verify(subscriptionNotifier).notifyAvailable(house);
         }
     }
 

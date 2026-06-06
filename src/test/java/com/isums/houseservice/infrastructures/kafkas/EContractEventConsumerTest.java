@@ -311,7 +311,11 @@ class EContractEventConsumerTest {
 
             consumer.handleInspectionDone("v");
 
-            verify(houseService).deactivateHouseForUser(event.getTenantId(), event.getHouseId(), false);
+            verify(houseService).completeCheckoutAndHandover(
+                    eq(event.getTenantId()),
+                    eq(event.getHouseId()),
+                    any(java.time.Instant.class),
+                    eq(false));
         }
 
         @Test
@@ -323,7 +327,8 @@ class EContractEventConsumerTest {
 
             consumer.handleInspectionDone("v");
 
-            verify(houseService, never()).deactivateHouseForUser(any(), any(), anyBoolean());
+            verify(houseService, never()).completeCheckoutAndHandover(
+                    any(), any(), any(), anyBoolean());
         }
     }
 
