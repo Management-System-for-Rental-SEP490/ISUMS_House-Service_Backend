@@ -253,6 +253,7 @@ public class HouseServiceImpl implements HouseService {
             }
             house.setNextTenantId(null);
             house.setNextHandoverDate(null);
+            house.setBookingState(BookingState.NONE);
             house.setUpdatedAt(Instant.now());
             houseRepository.save(house);
             cachedPageService.evictAll(PAGE_NS);
@@ -268,6 +269,7 @@ public class HouseServiceImpl implements HouseService {
         if (houseCurrentlyOccupied && handoverDate != null && handoverDate.isAfter(Instant.now())) {
             house.setNextTenantId(userId);
             house.setNextHandoverDate(handoverDate);
+            house.setBookingState(BookingState.RESERVED);
             houseRepository.save(house);
             cachedPageService.evictAll(PAGE_NS);
 
@@ -503,6 +505,7 @@ public class HouseServiceImpl implements HouseService {
         house.setStatus(keepUnavailable
                 ? HouseStatus.REPAIRED
                 : (hasPendingNextTenant ? HouseStatus.RENTED : HouseStatus.AVAILABLE));
+        house.setBookingState(BookingState.NONE);
         house.setUpdatedAt(Instant.now());
         houseRepository.save(house);
         cachedPageService.evictAll(PAGE_NS);
@@ -625,6 +628,7 @@ public class HouseServiceImpl implements HouseService {
 
         boolean hasPendingNext = nextTenantId != null;
         house.setStatus(hasPendingNext ? HouseStatus.RENTED : HouseStatus.AVAILABLE);
+        house.setBookingState(BookingState.NONE);
         house.setUpdatedAt(Instant.now());
         houseRepository.save(house);
         cachedPageService.evictAll(PAGE_NS);
@@ -785,6 +789,7 @@ public class HouseServiceImpl implements HouseService {
         house.setHandoverDate(handoverDate);
         house.setNextTenantId(null);
         house.setNextHandoverDate(null);
+        house.setBookingState(BookingState.NONE);
         house.setStatus(HouseStatus.RENTED);
         houseRepository.save(house);
         cachedPageService.evictAll(PAGE_NS);

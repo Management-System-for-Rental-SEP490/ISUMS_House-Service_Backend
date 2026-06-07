@@ -1813,5 +1813,44 @@ class HouseServiceImplTest {
             assertThat(saved.getBookingState()).isEqualTo(BookingState.OPEN_FOR_DEPOSIT);
             assertThat(saved.getStatus()).isEqualTo(HouseStatus.RENTED);
         }
+
+        @Test
+        @DisplayName("activeHouseForUser sets RESERVED when reserving an occupied house for a future tenant")
+        void activeHouseForUser_pendingSetsReserved() {
+            UUID nextTenant = UUID.randomUUID();
+            House h = House.builder().id(houseId).status(HouseStatus.RENTED)
+                    .userRentalId(UUID.randomUUID())
+                    .bookingState(BookingState.OPEN_FOR_DEPOSIT).build();
+            given(houseRepository.findById(houseId)).willReturn(Optional.of(h));
+            TenantGroup pending = TenantGroup.builder().id(UUID.randomUUID()).houseId(houseId).isActive(false).build();
+            given(tenantGroupRepository.findAllByHouseId(houseId)).willReturn(List.of(pending));
+            given(tenantMemberRepository.existsById(any())).willReturn(true);
+
+            houseService.activeHouseForUser(nextTenant, houseId, Instant.now().plusSeconds(432000));
+
+            ArgumentCaptor<House> captor = ArgumentCaptor.forClass(House.class);
+            verify(houseRepository).save(captor.capture());
+            House saved = captor.getValue();
+            assertThat(saved.getNextTenantId()).isEqualTo(nextTenant);
+            assertThat(saved.getBookingState()).isEqualTo(BookingState.RESERVED);
+        }
+
+        @Test
+        @DisplayName("deactivateHouseForUser clears bookingState to NONE on release")
+        void deactivate_clearsBookingState() {
+            UUID tenant = UUID.randomUUID();
+            House h = House.builder().id(houseId).status(HouseStatus.RENTED)
+                    .userRentalId(tenant).bookingState(BookingState.OPEN_FOR_DEPOSIT).build();
+            given(houseRepository.findById(houseId)).willReturn(Optional.of(h));
+            given(tenantGroupRepository.findAllByHouseIdAndIsActiveTrue(houseId)).willReturn(List.of());
+
+            houseService.deactivateHouseForUser(tenant, houseId, false);
+
+            ArgumentCaptor<House> captor = ArgumentCaptor.forClass(House.class);
+            verify(houseRepository).save(captor.capture());
+            House saved = captor.getValue();
+            assertThat(saved.getBookingState()).isEqualTo(BookingState.NONE);
+            assertThat(saved.getStatus()).isEqualTo(HouseStatus.AVAILABLE);
+        }
     }
 }
