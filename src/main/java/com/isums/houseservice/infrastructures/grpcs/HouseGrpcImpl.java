@@ -198,6 +198,29 @@ public class HouseGrpcImpl extends HouseServiceGrpc.HouseServiceImplBase {
 
     @Override
     @Transactional(readOnly = true)
+    public void getDepositBookableHouses(GetAllHousesRequest request, StreamObserver<ListHouseResponse> responseObserver) {
+        try {
+            List<House> houses = houseRepository.findByStatusAndBookingState(
+                    com.isums.houseservice.domains.emuns.HouseStatus.RENTED,
+                    com.isums.houseservice.domains.emuns.BookingState.OPEN_FOR_DEPOSIT);
+            ListHouseResponse.Builder res = ListHouseResponse.newBuilder();
+            for (House house : houses) {
+                res.addHouse(houseGrpcMapper.toHouseResponse(house));
+            }
+            log.info("[HouseGrpc] getDepositBookableHouses returned {} houses", houses.size());
+            responseObserver.onNext(res.build());
+            responseObserver.onCompleted();
+        } catch (DataAccessException dae) {
+            log.error("DB error in getDepositBookableHouses", dae);
+            responseObserver.onError(Status.UNAVAILABLE.withDescription("Database unavailable").withCause(dae).asRuntimeException());
+        } catch (Exception ex) {
+            log.error("Unexpected error in getDepositBookableHouses", ex);
+            responseObserver.onError(Status.INTERNAL.withDescription("Internal server error").withCause(ex).asRuntimeException());
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public void getHousesByManagerRegion(GetHouseByUserRequest request, StreamObserver<ListHouseResponse> responseObserver) {
         try {
             String userId = request.getUserId().trim();
