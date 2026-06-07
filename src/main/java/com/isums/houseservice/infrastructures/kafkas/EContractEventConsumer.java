@@ -8,6 +8,7 @@ import com.isums.houseservice.domains.events.ContractReplacedEvent;
 import com.isums.houseservice.domains.events.ContractTerminatedEvent;
 import com.isums.houseservice.domains.events.InspectionDoneNotifyEvent;
 import com.isums.houseservice.domains.events.MapUserToHouseEvent;
+import com.isums.houseservice.domains.events.RenewalWindowOpenEvent;
 import com.isums.houseservice.infrastructures.abstracts.HouseService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -224,11 +225,37 @@ public class EContractEventConsumer {
                 event.getMessageId(), event.getContractId(),
                 event.getHouseId(), event.getTenantId());
         try {
-            houseService.deactivateHouseForUser(event.getTenantId(), event.getHouseId(), false);
-            log.info("[KAFKA] contract.deposit-expired processed msgId={} houseId={} -> released",
+            houseService.releaseExpiredDeposit(event.getTenantId(), event.getHouseId());
+            log.info("[KAFKA] contract.deposit-expired processed msgId={} houseId={} -> released/reopened",
                     event.getMessageId(), event.getHouseId());
         } catch (Exception e) {
             log.warn("[KAFKA] handleContractDepositExpired failed - will retry: {}", e.getMessage());
+            throw new RuntimeException(e);
+        }
+    }
+
+    @KafkaListener(topics = "contract.renewal-window.open", groupId = GROUP,
+            properties = {"auto.offset.reset:earliest"})
+    public void handleRenewalWindowOpen(String payload) {
+        log.info("[KAFKA] contract.renewal-window.open ENTRY len={}", payload != null ? payload.length() : -1);
+        if (payload == null) return;
+        RenewalWindowOpenEvent event;
+        try {
+            event = objectMapper.readValue(payload, RenewalWindowOpenEvent.class);
+        } catch (JacksonException e) {
+            log.error("[KAFKA] contract.renewal-window.open deserialize failed raw={}: {}", payload, e.getMessage());
+            return;
+        }
+        if (event.getHouseId() == null) {
+            log.warn("[KAFKA] contract.renewal-window.open missing houseId msgId={}", event.getMessageId());
+            return;
+        }
+        try {
+            houseService.openDepositWindow(event.getHouseId());
+            log.info("[KAFKA] contract.renewal-window.open processed msgId={} houseId={}",
+                    event.getMessageId(), event.getHouseId());
+        } catch (Exception e) {
+            log.warn("[KAFKA] handleRenewalWindowOpen failed - will retry: {}", e.getMessage());
             throw new RuntimeException(e);
         }
     }

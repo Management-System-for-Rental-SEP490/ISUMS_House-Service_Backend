@@ -9,6 +9,7 @@ import com.isums.houseservice.domains.dtos.InvoiceStatusDto;
 import com.isums.houseservice.domains.dtos.UpdateHouseTranslationsRequest;
 import com.isums.houseservice.domains.emuns.AccessStatus;
 import com.isums.houseservice.domains.emuns.AreaType;
+import com.isums.houseservice.domains.emuns.BookingState;
 import com.isums.houseservice.domains.emuns.FuctionalAreaStatus;
 import com.isums.houseservice.domains.emuns.HouseMemberRole;
 import com.isums.houseservice.domains.emuns.HouseStatus;
@@ -1731,6 +1732,86 @@ class HouseServiceImplTest {
             houseService.updateHouseTranslations(houseId, req);
 
             verify(translationAutoFillService, never()).complete(anyString());
+        }
+    }
+
+    @Nested
+    @DisplayName("Deposit booking window")
+    class DepositBookingWindow {
+
+        @Test
+        @DisplayName("openDepositWindow sets OPEN_FOR_DEPOSIT for a RENTED house")
+        void openDepositWindow_rented() {
+            House h = House.builder().id(houseId).status(HouseStatus.RENTED)
+                    .bookingState(BookingState.NONE).build();
+            given(houseRepository.findById(houseId)).willReturn(Optional.of(h));
+
+            houseService.openDepositWindow(houseId);
+
+            ArgumentCaptor<House> captor = ArgumentCaptor.forClass(House.class);
+            verify(houseRepository).save(captor.capture());
+            assertThat(captor.getValue().getBookingState()).isEqualTo(BookingState.OPEN_FOR_DEPOSIT);
+            verify(cachedPageService).evictAll("houses");
+        }
+
+        @Test
+        @DisplayName("openDepositWindow skips when house is AVAILABLE")
+        void openDepositWindow_availableSkips() {
+            House h = House.builder().id(houseId).status(HouseStatus.AVAILABLE)
+                    .bookingState(BookingState.NONE).build();
+            given(houseRepository.findById(houseId)).willReturn(Optional.of(h));
+
+            houseService.openDepositWindow(houseId);
+
+            verify(houseRepository, never()).save(any(House.class));
+        }
+
+        @Test
+        @DisplayName("openDepositWindow does not override RESERVED")
+        void openDepositWindow_reservedSkips() {
+            House h = House.builder().id(houseId).status(HouseStatus.RENTED)
+                    .bookingState(BookingState.RESERVED).build();
+            given(houseRepository.findById(houseId)).willReturn(Optional.of(h));
+
+            houseService.openDepositWindow(houseId);
+
+            verify(houseRepository, never()).save(any(House.class));
+        }
+
+        @Test
+        @DisplayName("closeDepositWindow resets OPEN_FOR_DEPOSIT to NONE")
+        void closeDepositWindow_resets() {
+            House h = House.builder().id(houseId).status(HouseStatus.RENTED)
+                    .bookingState(BookingState.OPEN_FOR_DEPOSIT).build();
+            given(houseRepository.findById(houseId)).willReturn(Optional.of(h));
+
+            houseService.closeDepositWindow(houseId);
+
+            ArgumentCaptor<House> captor = ArgumentCaptor.forClass(House.class);
+            verify(houseRepository).save(captor.capture());
+            assertThat(captor.getValue().getBookingState()).isEqualTo(BookingState.NONE);
+        }
+
+        @Test
+        @DisplayName("releaseExpiredDeposit reopens window when next tenant deposit expires")
+        void releaseExpiredDeposit_reservationReopens() {
+            UUID nextTenant = UUID.randomUUID();
+            House h = House.builder().id(houseId).status(HouseStatus.RENTED)
+                    .userRentalId(UUID.randomUUID())
+                    .nextTenantId(nextTenant)
+                    .nextHandoverDate(Instant.now().plusSeconds(3600))
+                    .bookingState(BookingState.RESERVED).build();
+            given(houseRepository.findByIdForUpdate(houseId)).willReturn(Optional.of(h));
+
+            houseService.releaseExpiredDeposit(nextTenant, houseId);
+
+            ArgumentCaptor<House> captor = ArgumentCaptor.forClass(House.class);
+            verify(houseRepository).save(captor.capture());
+            House saved = captor.getValue();
+            assertThat(saved.getNextTenantId()).isNull();
+            assertThat(saved.getNextHandoverDate()).isNull();
+            assertThat(saved.getBookingState()).isEqualTo(BookingState.OPEN_FOR_DEPOSIT);
+            assertThat(saved.getStatus()).isEqualTo(HouseStatus.RENTED);
         }
     }
 }

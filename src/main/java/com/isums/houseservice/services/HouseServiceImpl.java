@@ -3,6 +3,7 @@ package com.isums.houseservice.services;
 import com.isums.houseservice.domains.dtos.*;
 import common.i18n.TranslationMap;
 import com.isums.houseservice.domains.emuns.AccessStatus;
+import com.isums.houseservice.domains.emuns.BookingState;
 import com.isums.houseservice.domains.emuns.HouseMemberRole;
 import com.isums.houseservice.domains.entities.*;
 import com.isums.houseservice.exceptions.NotFoundException;
@@ -513,6 +514,63 @@ public class HouseServiceImpl implements HouseService {
         if (house.getStatus() == HouseStatus.AVAILABLE) {
             subscriptionNotifier.notifyAvailable(house);
         }
+    }
+
+    @Override
+    @Transactional
+    public void openDepositWindow(UUID houseId) {
+        House house = houseRepository.findById(houseId)
+                .orElseThrow(() -> new NotFoundException("House not found: " + houseId));
+        if (house.getStatus() != HouseStatus.RENTED || house.getBookingState() == BookingState.RESERVED) {
+            log.info("[House] openDepositWindow skipped houseId={} status={} bookingState={}",
+                    houseId, house.getStatus(), house.getBookingState());
+            return;
+        }
+        if (house.getBookingState() == BookingState.OPEN_FOR_DEPOSIT) {
+            return;
+        }
+        house.setBookingState(BookingState.OPEN_FOR_DEPOSIT);
+        house.setUpdatedAt(Instant.now());
+        houseRepository.save(house);
+        cachedPageService.evictAll(PAGE_NS);
+        log.info("[House] Deposit window OPEN houseId={}", houseId);
+    }
+
+    @Override
+    @Transactional
+    public void closeDepositWindow(UUID houseId) {
+        House house = houseRepository.findById(houseId)
+                .orElseThrow(() -> new NotFoundException("House not found: " + houseId));
+        if (house.getBookingState() != BookingState.OPEN_FOR_DEPOSIT) {
+            return;
+        }
+        house.setBookingState(BookingState.NONE);
+        house.setUpdatedAt(Instant.now());
+        houseRepository.save(house);
+        cachedPageService.evictAll(PAGE_NS);
+        log.info("[House] Deposit window CLOSED houseId={}", houseId);
+    }
+
+    @Override
+    @Transactional
+    @CacheEvict(value = "user-house-access", allEntries = true)
+    public void releaseExpiredDeposit(UUID tenantId, UUID houseId) {
+        House house = houseRepository.findByIdForUpdate(houseId)
+                .orElseThrow(() -> new NotFoundException("House not found: " + houseId));
+        if (tenantId.equals(house.getNextTenantId())) {
+            house.setNextTenantId(null);
+            house.setNextHandoverDate(null);
+            house.setBookingState(house.getStatus() == HouseStatus.RENTED
+                    ? BookingState.OPEN_FOR_DEPOSIT
+                    : BookingState.NONE);
+            house.setUpdatedAt(Instant.now());
+            houseRepository.save(house);
+            cachedPageService.evictAll(PAGE_NS);
+            log.info("[House] Reservation deposit expired houseId={} nextTenantId={} -> reopened bookingState={}",
+                    houseId, tenantId, house.getBookingState());
+            return;
+        }
+        deactivateHouseForUser(tenantId, houseId, false);
     }
 
     @Override

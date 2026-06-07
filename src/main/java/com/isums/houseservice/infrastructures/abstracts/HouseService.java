@@ -42,6 +42,12 @@ public interface HouseService {
 
     void deactivateHouseForUser(UUID tenantId, UUID houseId, boolean keepUnavailable);
 
+    void openDepositWindow(UUID houseId);
+
+    void closeDepositWindow(UUID houseId);
+
+    void releaseExpiredDeposit(UUID tenantId, UUID houseId);
+
     void completeCheckoutAndHandover(
             UUID oldTenantId,
             UUID houseId,

@@ -8,6 +8,7 @@ import com.isums.houseservice.domains.events.ContractReplacedEvent;
 import com.isums.houseservice.domains.events.ContractTerminatedEvent;
 import com.isums.houseservice.domains.events.InspectionDoneNotifyEvent;
 import com.isums.houseservice.domains.events.MapUserToHouseEvent;
+import com.isums.houseservice.domains.events.RenewalWindowOpenEvent;
 import com.isums.houseservice.infrastructures.abstracts.HouseService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -351,7 +352,7 @@ class EContractEventConsumerTest {
 
             consumer.handleContractDepositExpired("payload");
 
-            verify(houseService).deactivateHouseForUser(tenantId, houseId, false);
+            verify(houseService).releaseExpiredDeposit(tenantId, houseId);
         }
 
         @Test
@@ -373,9 +374,61 @@ class EContractEventConsumerTest {
             when(objectMapper.readValue("payload", ContractDepositExpiredEvent.class))
                     .thenReturn(event);
             doThrow(new RuntimeException("house service down"))
-                    .when(houseService).deactivateHouseForUser(eq(tenantId), eq(houseId), eq(false));
+                    .when(houseService).releaseExpiredDeposit(eq(tenantId), eq(houseId));
 
             assertThatThrownBy(() -> consumer.handleContractDepositExpired("payload"))
+                    .isInstanceOf(RuntimeException.class);
+        }
+    }
+
+    @Nested
+    @DisplayName("handleRenewalWindowOpen")
+    class HandleRenewalWindowOpen {
+
+        @Test
+        @DisplayName("opens deposit window on happy path")
+        void happyPath() throws Exception {
+            UUID houseId = UUID.randomUUID();
+            RenewalWindowOpenEvent event = RenewalWindowOpenEvent.builder()
+                    .contractId(UUID.randomUUID()).houseId(houseId)
+                    .messageId(UUID.randomUUID().toString()).build();
+            when(objectMapper.readValue("payload", RenewalWindowOpenEvent.class)).thenReturn(event);
+
+            consumer.handleRenewalWindowOpen("payload");
+
+            verify(houseService).openDepositWindow(houseId);
+        }
+
+        @Test
+        @DisplayName("swallows null payload")
+        void nullPayload() {
+            consumer.handleRenewalWindowOpen(null);
+            verifyNoInteractions(houseService);
+        }
+
+        @Test
+        @DisplayName("skips when houseId missing")
+        void missingHouseId() throws Exception {
+            RenewalWindowOpenEvent event = RenewalWindowOpenEvent.builder()
+                    .messageId("m").build();
+            when(objectMapper.readValue("payload", RenewalWindowOpenEvent.class)).thenReturn(event);
+
+            consumer.handleRenewalWindowOpen("payload");
+
+            verify(houseService, never()).openDepositWindow(any());
+        }
+
+        @Test
+        @DisplayName("rethrows on downstream failure for retry")
+        void downstreamFails() throws Exception {
+            UUID houseId = UUID.randomUUID();
+            RenewalWindowOpenEvent event = RenewalWindowOpenEvent.builder()
+                    .houseId(houseId).messageId("m").build();
+            when(objectMapper.readValue("payload", RenewalWindowOpenEvent.class)).thenReturn(event);
+            doThrow(new RuntimeException("house service down"))
+                    .when(houseService).openDepositWindow(houseId);
+
+            assertThatThrownBy(() -> consumer.handleRenewalWindowOpen("payload"))
                     .isInstanceOf(RuntimeException.class);
         }
     }

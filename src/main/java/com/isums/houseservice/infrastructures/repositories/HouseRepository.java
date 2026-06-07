@@ -1,5 +1,7 @@
 package com.isums.houseservice.infrastructures.repositories;
 
+import com.isums.houseservice.domains.emuns.BookingState;
+import com.isums.houseservice.domains.emuns.HouseStatus;
 import com.isums.houseservice.domains.entities.House;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -62,4 +64,6 @@ public interface HouseRepository extends JpaRepository<House, UUID>, JpaSpecific
 
     @Query("SELECT h FROM House h WHERE h.region.id = :regionId")
     List<House> findAllByRegionId(UUID regionId);
+
+    List<House> findByStatusAndBookingState(HouseStatus status, BookingState bookingState);
 }

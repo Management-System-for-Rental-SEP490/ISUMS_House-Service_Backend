@@ -2,6 +2,7 @@ package com.isums.houseservice.domains.entities;
 
 import common.i18n.TranslationMap;
 import common.i18n.TranslationMapConverter;
+import com.isums.houseservice.domains.emuns.BookingState;
 import com.isums.houseservice.domains.emuns.HouseStatus;
 import com.isums.houseservice.domains.emuns.HouseStructure;
 import jakarta.persistence.*;
@@ -112,6 +113,11 @@ public class House {
 
     @Column(name = "next_handover_date")
     private Instant nextHandoverDate;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "booking_state", length = 32)
+    @Builder.Default
+    private BookingState bookingState = BookingState.NONE;
 
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
